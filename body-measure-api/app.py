@@ -4,8 +4,18 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 import mediapipe as mp
+from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Models ---
 yolo_model = YOLO("weights/yolov8m-pose.pt")  # Use yolov8m-pose.pt for better accuracy
@@ -36,8 +46,8 @@ async def predict_mediapipe(
     front: UploadFile = File(...),
     side: UploadFile = File(...),
     height: int = Form(...),
-    weight: int = Form(...),
-    gender: str = Form(...)
+    weight: int = Form(None),
+    gender: str = Form(None)
 ):
     try:
         front_img = parse_image(front)
@@ -91,9 +101,9 @@ async def predict_mediapipe(
             "waist_in": cm_to_inch(waist_cm),
             "inseam_cm": round(inseam_cm, 1),
             "inseam_in": cm_to_inch(inseam_cm),
-            "gender": gender.lower(),
+            "gender": gender.lower() if gender else None,
             "height_cm": height,
-            "weight_kg": weight
+            "weight_kg": weight if weight is not None else None
         }
 
     except Exception as e:
@@ -105,8 +115,8 @@ async def predict_yolo(
     front: UploadFile = File(...),
     side: UploadFile = File(...),
     height: int = Form(...),
-    weight: int = Form(...),
-    gender: str = Form(...)
+    weight: int = Form(None),
+    gender: str = Form(None)
 ):
     try:
         front_img = parse_image(front)
@@ -152,10 +162,95 @@ async def predict_yolo(
             "waist_in": cm_to_inch(waist_cm),
             "inseam_cm": round(inseam_cm, 1),
             "inseam_in": cm_to_inch(inseam_cm),
-            "gender": gender.lower(),
+            "gender": gender.lower() if gender else None,
             "height_cm": height,
-            "weight_kg": weight
+            "weight_kg": weight if weight is not None else None
         }
 
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# --- Full Body Detection with MediaPipe Holistic ---
+@app.post("/detect-fullbody")
+async def detect_fullbody(
+    image: UploadFile = File(...)
+):
+    try:
+        img = parse_image(image)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        mp_holistic = mp.solutions.holistic
+        with mp_holistic.Holistic(static_image_mode=True, min_detection_confidence=0.5) as holistic:
+            results = holistic.process(img_rgb)
+            # Check for pose landmarks (full body)
+            pose_landmarks = results.pose_landmarks
+            # Heuristic: if enough pose landmarks are detected, assume full body is present
+            if pose_landmarks and len(pose_landmarks.landmark) >= 30:
+                # Optionally, check for feet/ankle/shoulder/nose presence for more strictness
+                required = [mp_holistic.PoseLandmark.LEFT_ANKLE, mp_holistic.PoseLandmark.RIGHT_ANKLE,
+                            mp_holistic.PoseLandmark.LEFT_SHOULDER, mp_holistic.PoseLandmark.RIGHT_SHOULDER,
+                            mp_holistic.PoseLandmark.NOSE]
+                visible = all(pose_landmarks.landmark[lm].visibility > 0.5 for lm in required)
+                if visible:
+                    return {"full_body": True, "message": "Full body detected"}
+                else:
+                    return {"full_body": False, "message": "Person detected, but not full body (some keypoints missing)"}
+            else:
+                return {"full_body": False, "message": "No full body detected"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/predict-avg")
+async def predict_avg(
+    front: UploadFile = File(...),
+    side: UploadFile = File(...),
+    height: int = Form(...),
+    weight: int = Form(None),
+    gender: str = Form(None)
+):
+    try:
+        # Prepare files and form data for internal calls
+        from fastapi.datastructures import UploadFile as FastAPIUploadFile
+        import io
+        # Read file bytes once
+        front_bytes = await front.read()
+        side_bytes = await side.read()
+        # Helper to create UploadFile from bytes
+        def make_uploadfile(name, bytes_data, content_type):
+            return UploadFile(filename=name, file=io.BytesIO(bytes_data), content_type=content_type)
+        # Create new UploadFile objects for each call
+        front1 = make_uploadfile(front.filename, front_bytes, front.content_type)
+        side1 = make_uploadfile(side.filename, side_bytes, side.content_type)
+        front2 = make_uploadfile(front.filename, front_bytes, front.content_type)
+        side2 = make_uploadfile(side.filename, side_bytes, side.content_type)
+        # Call both functions
+        mediapipe_res = await predict_mediapipe(front=front1, side=side1, height=height, weight=weight, gender=gender)
+        yolo_res = await predict_yolo(front=front2, side=side2, height=height, weight=weight, gender=gender)
+        # If either is a JSONResponse (error), return error
+        if isinstance(mediapipe_res, JSONResponse):
+            return mediapipe_res
+        if isinstance(yolo_res, JSONResponse):
+            return yolo_res
+        # Average numeric fields
+        fields = [
+            "shoulder_cm", "shoulder_in", "chest_cm", "chest_in",
+            "waist_cm", "waist_in", "inseam_cm", "inseam_in"
+        ]
+        avg_result = {}
+        for f in fields:
+            v1 = mediapipe_res.get(f)
+            v2 = yolo_res.get(f)
+            if v1 is not None and v2 is not None:
+                avg_result[f] = round((v1 + v2) / 2, 1)
+            else:
+                avg_result[f] = v1 if v1 is not None else v2
+        # Add gender, height_cm, weight_kg
+        avg_result["gender"] = mediapipe_res.get("gender") or yolo_res.get("gender")
+        avg_result["height_cm"] = mediapipe_res.get("height_cm") or yolo_res.get("height_cm")
+        avg_result["weight_kg"] = mediapipe_res.get("weight_kg") or yolo_res.get("weight_kg")
+        return {
+            "average": avg_result,
+            "mediapipe": mediapipe_res,
+            "yolo": yolo_res
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})

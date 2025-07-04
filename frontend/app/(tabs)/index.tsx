@@ -1,346 +1,940 @@
-import React, { useState, createContext, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import React, {
+  useState,
+  useCallback,
+  createContext,
+  useContext,
+} from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+  Dimensions,
+  StatusBar,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '@/constants/Api';
 
-// Create a context for the analysis result
-export const AnalysisResultContext = createContext({ result: null, setResult: (_: any) => {} });
+const { width, height: screenHeight } = Dimensions.get('window');
 
-export function useAnalysisResult() {
-  return useContext(AnalysisResultContext);
+/*****************************************************************************************
+ * Context helpers
+ *****************************************************************************************/
+export const AnalysisResultContext = createContext<{
+  result: any;
+  setResult: React.Dispatch<React.SetStateAction<any>>;
+}>({ result: null, setResult: () => {} });
+export const useAnalysisResult = () => useContext(AnalysisResultContext);
+
+/*****************************************************************************************
+ * Utility helpers
+ *****************************************************************************************/
+enum ImageMime {
+  jpeg = 'jpeg',
+  png = 'png',
+  webp = 'webp',
+  heic = 'heic',
+  heif = 'heif',
 }
 
+const normaliseExt = (ext: string | undefined): ImageMime => {
+  switch ((ext || '').toLowerCase()) {
+    case 'jpg':
+    case 'jpeg':
+      return ImageMime.jpeg;
+    case 'png':
+      return ImageMime.png;
+    case 'webp':
+      return ImageMime.webp;
+    case 'heic':
+      return ImageMime.heic;
+    case 'heif':
+      return ImageMime.heif;
+    default:
+      return ImageMime.jpeg;
+  }
+};
+
+const stabiliseUri = async (uri: string): Promise<string> => {
+  if (Platform.OS === 'ios') return uri;
+  try {
+    const ext = uri.split('.').pop();
+    const newPath = `${FileSystem.cacheDirectory}upload-${Date.now()}.${ext}`;
+    await FileSystem.copyAsync({ from: uri, to: newPath });
+    return newPath;
+  } catch {
+    return uri;
+  }
+};
+
+/*****************************************************************************************
+ * Hook for full‑body validation
+ *****************************************************************************************/
+interface Validator {
+  validating: boolean;
+  validate: (uri: string) => Promise<boolean>;
+}
+
+const useFullBodyValidator = (kind: 'front' | 'side'): Validator => {
+  const [validating, setValidating] = useState(false);
+
+  const validate = useCallback(
+    async (rawUri: string): Promise<boolean> => {
+      if (validating) return false;
+      setValidating(true);
+      try {
+        // Use stabiliseUri for Android to ensure file accessibility
+        const uri = await stabiliseUri(rawUri);
+        const ext = uri.split('.').pop() || 'jpg';
+        const fd = new FormData();
+        fd.append('image', {
+          uri,
+          name: `${kind}.${ext}`,
+          type: `image/${ext}`,
+        } as any);
+        // Debug logging
+        console.log('Uploading image for validation:', { kind, uri, ext });
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30_000);
+
+        const res = await fetch(`${API_BASE_URL}/detect-fullbody`, {
+          method: 'POST',
+          body: fd,
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
+        }
+
+        const data = (await res.json()) as { full_body?: boolean; message?: string };
+        if (!data?.full_body) {
+          Alert.alert(
+            'Invalid Image',
+            data.message ||
+              'Please select a clear full‑body image showing the entire person.'
+          );
+          return false;
+        }
+        return true;
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          Alert.alert('Timeout', 'Validation request timed‑out, please retry.');
+        } else {
+          Alert.alert('Network', err.message || 'Request failed');
+        }
+        return false;
+      } finally {
+        setValidating(false);
+      }
+    },
+    [kind, validating]
+  );
+
+  return { validating, validate };
+};
+
+/*****************************************************************************************
+ * Main component
+ *****************************************************************************************/
 export default function OnboardingScreen() {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [frontImage, setFrontImage] = useState<string | null>(null);
-  const [sideImage, setSideImage] = useState<string | null>(null);
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
+
+  const [frontImage, setFrontImage] = useState<string | null>(null);
+  const [sideImage, setSideImage] = useState<string | null>(null);
+
+  const frontValidator = useFullBodyValidator('front');
+  const sideValidator = useFullBodyValidator('side');
+
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const router = useRouter();
 
-  // Helper to validate full body image
-  const validateFullBody = async (uri: string) => {
-    try {
-      const uriParts = uri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
-      const formData = new FormData();
-      formData.append('image', {
-        uri,
-        name: `photo.${fileType}`,
-        type: `image/${fileType}`,
-      } as any);
-      const response = await fetch(`${API_BASE_URL}/detect-fullbody`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
-      if (!response.ok || !data.full_body) {
-        Alert.alert('Please select a clear full body image.');
-        return false;
+  const pickFromLibrary = useCallback(
+    async (kind: 'front' | 'side') => {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        return Alert.alert('Permission denied', 'Media‑library access is required.');
       }
-      return true;
-    } catch (e) {
-      Alert.alert('Error validating image.');
-      return false;
-    }
-  };
 
-  const pickImage = async (which: 'front' | 'side') => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission denied', 'We need camera roll permissions to make this work!');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 1,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const uri = result.assets[0].uri;
-      const isFullBody = await validateFullBody(uri);
-      if (!isFullBody) return;
-      which === 'front' ? setFrontImage(uri) : setSideImage(uri);
-    }
-  };
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
 
-  const takePhoto = async (which: 'front' | 'side') => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission denied', 'We need camera permissions to make this work!');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 1,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const uri = result.assets[0].uri;
-      const isFullBody = await validateFullBody(uri);
-      if (!isFullBody) return;
-      which === 'front' ? setFrontImage(uri) : setSideImage(uri);
-    }
-  };
+      if (!res.canceled && res.assets?.[0]?.uri) {
+        const uri = res.assets[0].uri;
+        const ok = await (kind === 'front'
+          ? frontValidator.validate(uri)
+          : sideValidator.validate(uri));
+        if (ok) {
+          if (kind === 'front') {
+            setFrontImage(uri);
+          } else {
+            setSideImage(uri);
+          }
+        }
+      }
+    },
+    [frontValidator, sideValidator]
+  );
 
-  const handleAnalyse = async () => {
+  const takePhoto = useCallback(
+    async (kind: 'front' | 'side') => {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        return Alert.alert('Permission denied', 'Camera access is required.');
+      }
+
+      const res = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!res.canceled && res.assets?.[0]?.uri) {
+        const uri = res.assets[0].uri;
+        const ok = await (kind === 'front'
+          ? frontValidator.validate(uri)
+          : sideValidator.validate(uri));
+        if (ok) {
+          if (kind === 'front') {
+            setFrontImage(uri);
+          } else {
+            setSideImage(uri);
+          }
+        }
+      }
+    },
+    [frontValidator, sideValidator]
+  );
+
+  const handleAnalyse = useCallback(async () => {
     if (!frontImage || !sideImage || !height) {
-      Alert.alert('Missing info', 'Please provide all required information.');
-      return;
+      return Alert.alert('Missing info', 'Please complete all mandatory fields.');
     }
-    setLoading(true);
     try {
-      const makeFormData = () => {
-        const fd = new FormData();
-        const frontType = frontImage.split('.').pop();
-        const sideType = sideImage.split('.').pop();
-        fd.append('front', {
-          uri: frontImage,
-          name: `front.${frontType}`,
-          type: `image/${frontType}`,
+      setLoading(true);
+      const fd = new FormData();
+      const pushFile = (uri: string, field: 'front' | 'side') => {
+        const ext = normaliseExt(uri.split('.').pop());
+        fd.append(field, {
+          uri,
+          name: `${field}.${ext}`,
+          type: `image/${ext}`,
         } as any);
-        fd.append('side', {
-          uri: sideImage,
-          name: `side.${sideType}`,
-          type: `image/${sideType}`,
-        } as any);
-        fd.append('height', height);
-        if (weight) fd.append('weight', weight);
-        fd.append('gender', 'other');
-        return fd;
       };
-      const formData = makeFormData();
-      // Call the new /predict-avg endpoint
-      const response = await fetch(`${API_BASE_URL}/predict-avg`, {
+      pushFile(frontImage, 'front');
+      pushFile(sideImage, 'side');
+      fd.append('height', height);
+      if (weight) fd.append('weight', weight);
+      fd.append('gender', 'other');
+
+      const res = await fetch(`${API_BASE_URL}/predict-avg`, {
         method: 'POST',
-        body: formData,
+        body: fd,
       });
-      const result = await response.json();
-      if (result.error) {
-        Alert.alert('Analysis failed', result.error);
-        setLoading(false);
-        return;
-      }
-      setResult(result); // Store in context
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
+      setResult(data);
+      setLoading(false);
       router.replace('/(tabs)/store');
-    } catch (e) {
-      Alert.alert('Error', 'Could not connect to server.');
-    } finally {
+    } catch (err: any) {
+      Alert.alert('Analyse failed', err.message || 'Server error');
       setLoading(false);
     }
-  };
+  }, [frontImage, sideImage, height, weight, router]);
+
+  const renderWelcomeStep = () => (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#FF6B6B" />
+      <LinearGradient
+        colors={['#FF6B6B', '#4ECDC4', '#45B7D1']}
+        style={styles.gradientBackground}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      
+      <View style={styles.welcomeHeader}>
+        <Image
+          source={require('@/assets/images/icon.png')}
+          style={styles.premiumLogo}
+        />
+        <Text style={styles.brandTitle}>StyleFit</Text>
+        <Text style={styles.brandSubtitle}>Premium Fashion Experience</Text>
+      </View>
+
+      <View style={styles.welcomeCard}>
+        <View style={styles.iconRow}>
+          <View style={styles.featureIcon}>
+            <Text style={styles.iconText}>👤</Text>
+          </View>
+          <View style={styles.featureIcon}>
+            <Text style={styles.iconText}>📐</Text>
+          </View>
+          <View style={styles.featureIcon}>
+            <Text style={styles.iconText}>🛍️</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.welcomeTitle}>Find Your Perfect Fit</Text>
+        <Text style={styles.welcomeDescription}>
+          Get personalized clothing recommendations using AI-powered body analysis. Shop with confidence knowing your size.
+        </Text>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Your Name</Text>
+            <TextInput
+              style={styles.premiumInput}
+              placeholder="Enter your name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              placeholderTextColor="#B0B8C4"
+            />
+          </View>
+          
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Email Address</Text>
+            <TextInput
+              style={styles.premiumInput}
+              placeholder="Enter your email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor="#B0B8C4"
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.premiumButton, !(name && email) && styles.disabledButton]}
+          disabled={!(name && email)}
+          onPress={() => setStep(2)}
+        >
+          <LinearGradient
+            colors={name && email ? ['#FF6B6B', '#FF8E53'] : ['#E5E7EB', '#E5E7EB']}
+            style={styles.buttonGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Text style={[styles.buttonText, !(name && email) && styles.disabledButtonText]}>
+              Get Started
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderImageStep = (
+    stepNumber: number,
+    title: string,
+    description: string,
+    imageUri: string | null,
+    kind: 'front' | 'side',
+    validator: Validator,
+    nextAction: () => void
+  ) => (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.stepHeader}>
+        <View style={styles.stepIndicator}>
+          <Text style={styles.stepNumber}>{stepNumber}</Text>
+        </View>
+        <Text style={styles.stepTitle}>{title}</Text>
+        <Text style={styles.stepDescription}>{description}</Text>
+      </View>
+
+      <View style={styles.imageCard}>
+        <TouchableOpacity
+          style={styles.premiumImagePicker}
+          onPress={() => pickFromLibrary(kind)}
+          disabled={validator.validating}
+        >
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.selectedImage} resizeMode="contain" />
+          ) : (
+            <View style={styles.imagePlaceholderContainer}>
+              <View style={styles.uploadIcon}>
+                <Text style={styles.uploadIconText}>📸</Text>
+              </View>
+              <Text style={styles.uploadText}>Tap to upload image</Text>
+              <Text style={styles.uploadSubtext}>JPG, PNG up to 10MB</Text>
+            </View>
+          )}
+          
+          {validator.validating && (
+            <View style={styles.validationOverlay}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={styles.validationText}>Analyzing image...</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, validator.validating && styles.disabledButton]}
+            onPress={() => takePhoto(kind)}
+            disabled={validator.validating}
+          >
+            <Text style={styles.actionButtonText}>📷 Camera</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, validator.validating && styles.disabledButton]}
+            onPress={() => pickFromLibrary(kind)}
+            disabled={validator.validating}
+          >
+            <Text style={styles.actionButtonText}>🖼️ Gallery</Text>
+          </TouchableOpacity>
+        </View>
+
+        {imageUri && (
+          <TouchableOpacity
+            style={styles.premiumButton}
+            onPress={nextAction}
+          >
+            <LinearGradient
+              colors={['#FF6B6B', '#FF8E53']}
+              style={styles.buttonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Text style={styles.buttonText}>Continue</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderFinalStep = () => (
+    <View style={styles.finalStepContainer}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.stepHeader}>
+        <View style={styles.stepIndicator}>
+          <Text style={styles.stepNumber}>4</Text>
+        </View>
+        <Text style={styles.stepTitle}>Body Measurements</Text>
+        <Text style={styles.stepDescription}>Help us get your perfect fit</Text>
+      </View>
+
+      <View style={styles.finalCard}>
+        {sideImage && (
+          <View style={styles.selectedImagePreview}>
+            <Image source={{ uri: sideImage }} style={styles.previewImage} />
+            <Text style={styles.imageLabel}>Side View ✓</Text>
+          </View>
+        )}
+
+        <View style={styles.measurementInputs}>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Height (cm) *</Text>
+            <TextInput
+              style={styles.premiumInput}
+              placeholder="Enter height in cm"
+              keyboardType="numeric"
+              value={height}
+              onChangeText={setHeight}
+              placeholderTextColor="#B0B8C4"
+            />
+          </View>
+          
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Weight (kg)</Text>
+            <TextInput
+              style={styles.premiumInput}
+              placeholder="Enter weight (optional)"
+              keyboardType="numeric"
+              value={weight}
+              onChangeText={setWeight}
+              placeholderTextColor="#B0B8C4"
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.premiumButton,
+            styles.analyzeButton,
+            (!(sideImage && height) || loading) && styles.disabledButton
+          ]}
+          disabled={!(sideImage && height) || loading}
+          onPress={handleAnalyse}
+        >
+          <LinearGradient
+            colors={
+              sideImage && height && !loading
+                ? ['#10B981', '#059669']
+                : ['#E5E7EB', '#E5E7EB']
+            }
+            style={styles.buttonGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color="#fff" size="small" />
+                <Text style={styles.loadingText}>Analyzing...</Text>
+              </View>
+            ) : (
+              <Text style={[
+                styles.buttonText,
+                (!(sideImage && height) || loading) && styles.disabledButtonText
+              ]}>
+                ✨ Get My Recommendations
+              </Text>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Show API result if available */}
+        {result && (
+          <View style={styles.resultCard}>
+            <Text style={styles.resultTitle}>API Result</Text>
+            <ScrollView style={styles.resultScroll}>
+              <Text style={styles.resultText}>{JSON.stringify(result, null, 2)}</Text>
+            </ScrollView>
+          </View>
+        )}
+      </View>
+    </View>
+  );
 
   return (
     <AnalysisResultContext.Provider value={{ result, setResult }}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          {step === 1 && (
-            <View style={styles.card}>
-              <Image source={require('@/assets/images/icon.png')} style={styles.logo} />
-              <Text style={styles.title}>Welcome to Walmart Shopping Experience</Text>
-              <Text style={styles.subtitle}>Let&apos;s get started by knowing you!</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Name"
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                style={[styles.button, !(name && email) && styles.buttonDisabled]}
-                disabled={!(name && email)}
-                onPress={() => setStep(2)}
-              >
-                <Text style={styles.buttonText}>Next</Text>
-              </TouchableOpacity>
-            </View>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {step === 1 && renderWelcomeStep()}
+          {step === 2 && renderImageStep(
+            1,
+            "Front View Photo",
+            "Stand straight, arms at your sides, facing the camera",
+            frontImage,
+            'front',
+            frontValidator,
+            () => setStep(3)
           )}
-          {step === 2 && (
-            <View style={styles.card}>
-              <Text style={styles.title}>Step 1: Upload Front Image</Text>
-              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage('front')}>
-                {frontImage ? (
-                  <Image source={{ uri: frontImage }} style={styles.image} resizeMode="cover" />
-                ) : (
-                  <Text style={styles.imagePlaceholder}>Tap to select front image</Text>
-                )}
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', gap: 16, marginBottom: 8, justifyContent: 'center' }}>
-                <TouchableOpacity style={styles.actionButtonLarge} onPress={() => takePhoto('front')}>
-                  <Text style={styles.actionButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButtonLarge} onPress={() => pickImage('front')}>
-                  <Text style={styles.actionButtonText}>Gallery</Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={[styles.button, !frontImage && styles.buttonDisabled]}
-                disabled={!frontImage}
-                onPress={() => setStep(3)}
-              >
-                <Text style={styles.buttonText}>Next</Text>
-              </TouchableOpacity>
-            </View>
+          {step === 3 && renderImageStep(
+            2,
+            "Side View Photo",
+            "Turn to your side, arms at your sides, profile view",
+            sideImage,
+            'side',
+            sideValidator,
+            () => setStep(4)
           )}
-          {step === 3 && (
-            <View style={styles.card}>
-              <Text style={styles.title}>Step 2: Upload Side Image</Text>
-              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage('side')}>
-                {sideImage ? (
-                  <Image source={{ uri: sideImage }} style={styles.image} resizeMode="cover" />
-                ) : (
-                  <Text style={styles.imagePlaceholder}>Tap to select side image</Text>
-                )}
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', gap: 16, marginBottom: 8, justifyContent: 'center' }}>
-                <TouchableOpacity style={styles.actionButtonLarge} onPress={() => takePhoto('side')}>
-                  <Text style={styles.actionButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButtonLarge} onPress={() => pickImage('side')}>
-                  <Text style={styles.actionButtonText}>Gallery</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Height (cm)"
-                value={height}
-                onChangeText={setHeight}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Weight (kg) (optional)"
-                value={weight}
-                onChangeText={setWeight}
-                keyboardType="numeric"
-              />
-              <TouchableOpacity
-                style={[styles.button, !(sideImage && height) && styles.buttonDisabled]}
-                disabled={!(sideImage && height)}
-                onPress={handleAnalyse}
-              >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Analyse</Text>}
-              </TouchableOpacity>
-            </View>
-          )}
+          {step === 4 && renderFinalStep()}
         </ScrollView>
       </KeyboardAvoidingView>
     </AnalysisResultContext.Provider>
   );
 }
 
+/*****************************************************************************************
+ * Premium Modern Styles
+ *****************************************************************************************/
 const styles = StyleSheet.create({
-  container: {
+  keyboardContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f7f7f7',
-    padding: 24,
   },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
+  container: {
+    flex: 1,
+    minHeight: screenHeight,
+  },
+  gradientBackground: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  welcomeHeader: {
+    alignItems: 'center',
+    paddingTop: 80,
+    paddingBottom: 40,
+  },
+  premiumLogo: {
+    width: 100,
+    height: 100,
+    borderRadius: 25,
+    marginBottom: 20,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 2,
-    alignItems: 'center',
-    marginVertical: 24,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  logo: {
-    width: 80,
-    height: 80,
-    marginBottom: 16,
-    borderRadius: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 8,
+  brandTitle: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#FFFFFF',
     textAlign: 'center',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  subtitle: {
+  brandSubtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
-  },
-  input: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
-  },
-  button: {
-    width: '100%',
-    backgroundColor: '#0071ce',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
     marginTop: 8,
+    letterSpacing: 0.5,
   },
-  buttonDisabled: {
-    backgroundColor: '#b0c4de',
+  welcomeCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    flex: 1,
+    padding: 30,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  iconRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 30,
+    gap: 20,
+  },
+  featureIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  iconText: {
+    fontSize: 24,
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 34,
+  },
+  welcomeDescription: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 40,
+    paddingHorizontal: 10,
+  },
+  inputContainer: {
+    marginBottom: 30,
+  },
+  inputWrapper: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  premiumInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: '#1F2937',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  premiumButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  buttonGradient: {
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
-  imagePicker: {
-    width: 180,
-    height: 220,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
+  disabledButton: {
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  disabledButtonText: {
+    color: '#9CA3AF',
+  },
+  stepHeader: {
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingBottom: 30,
+    paddingHorizontal: 30,
+    backgroundColor: '#FFFFFF',
+  },
+  stepIndicator: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FF6B6B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#FF6B6B',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  stepNumber: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  stepTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  stepDescription: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 20,
+  },
+  imageCard: {
+    flex: 1,
+    paddingHorizontal: 30,
+    paddingBottom: 30,
+    backgroundColor: '#FFFFFF',
+  },
+  premiumImagePicker: {
+    width: '100%',
+    height: 300,
+    borderRadius: 20,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 25,
+    overflow: 'hidden',
+  },
+  selectedImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+  },
+  imagePlaceholderContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  uploadIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    overflow: 'hidden',
   },
-  image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  uploadIconText: {
+    fontSize: 32,
   },
-  imagePlaceholder: {
-    color: '#aaa',
-    fontSize: 16,
-    textAlign: 'center',
-    paddingHorizontal: 8,
+  uploadText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
   },
-  actionButtonLarge: {
-    width: 120,
-    height: 40,
-    backgroundColor: '#0071ce',
-    borderRadius: 8,
+  uploadSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  validationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 18,
+  },
+  validationText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+    gap: 15,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   actionButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
     fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  finalStepContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  finalCard: {
+    flex: 1,
+    paddingHorizontal: 30,
+    paddingBottom: 30,
+  },
+  selectedImagePreview: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  previewImage: {
+    width: 120,
+    height: 160,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  imageLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  measurementInputs: {
+    marginBottom: 40,
+  },
+  analyzeButton: {
+    marginTop: 20,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  resultCard: {
+    marginTop: 30,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+    maxHeight: 200,
+  },
+  resultTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+    color: '#374151',
+  },
+  resultScroll: {
+    maxHeight: 140,
+  },
+  resultText: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 13,
+    color: '#111827',
   },
 });

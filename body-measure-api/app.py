@@ -208,20 +208,23 @@ async def predict_avg(
     gender: str = Form(None)
 ):
     try:
-        # Prepare files and form data for internal calls
-        from fastapi.datastructures import UploadFile as FastAPIUploadFile
         import io
         # Read file bytes once
         front_bytes = await front.read()
         side_bytes = await side.read()
+        
         # Helper to create UploadFile from bytes
-        def make_uploadfile(name, bytes_data, content_type):
-            return UploadFile(filename=name, file=io.BytesIO(bytes_data), content_type=content_type)
+        def make_uploadfile(filename, bytes_data):
+            file_obj = io.BytesIO(bytes_data)
+            # Create UploadFile with proper parameters
+            upload_file = UploadFile(file=file_obj, filename=filename)
+            return upload_file
+        
         # Create new UploadFile objects for each call
-        front1 = make_uploadfile(front.filename, front_bytes, front.content_type)
-        side1 = make_uploadfile(side.filename, side_bytes, side.content_type)
-        front2 = make_uploadfile(front.filename, front_bytes, front.content_type)
-        side2 = make_uploadfile(side.filename, side_bytes, side.content_type)
+        front1 = make_uploadfile(front.filename, front_bytes)
+        side1 = make_uploadfile(side.filename, side_bytes)
+        front2 = make_uploadfile(front.filename, front_bytes)
+        side2 = make_uploadfile(side.filename, side_bytes)
         # Call both functions
         mediapipe_res = await predict_mediapipe(front=front1, side=side1, height=height, weight=weight, gender=gender)
         yolo_res = await predict_yolo(front=front2, side=side2, height=height, weight=weight, gender=gender)

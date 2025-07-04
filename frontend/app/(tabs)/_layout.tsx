@@ -21,6 +21,10 @@ const StoreIcon = ({ color }: { color: string }) => (
   <IconSymbol size={28} name="cart.fill" color={color} />
 );
 
+const ScanIcon = ({ color }: { color: string }) => (
+  <IconSymbol size={28} name="barcode.viewfinder" color={color} />
+);
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [result, setResult] = React.useState(null);
@@ -61,7 +65,8 @@ export default function TabLayout() {
             fontWeight: '600',
             marginTop: 4,
           },
-        }}>
+        }}
+      >
         <Tabs.Screen
           name="index"
           options={{
@@ -70,10 +75,24 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="explore"
+          options={{
+            title: 'Explore',
+            tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          }}
+        />
+        <Tabs.Screen
           name="image-upload"
           options={{
-            title: 'Measure',
+            title: 'Image',
             tabBarIcon: MeasureIcon,
+          }}
+        />
+        <Tabs.Screen
+          name="qr-scan"
+          options={{
+            title: 'QR Scan',
+            tabBarIcon: ScanIcon,
           }}
         />
         <Tabs.Screen

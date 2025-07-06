@@ -10,6 +10,9 @@ from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
 from typing import List, Optional
 
+# Import models
+from models import UserCreate, UserResponse, ProductCreate, ProductResponse
+
 # Import body measure router
 try:
     from views.body_measure_views import router as body_measure_router
@@ -76,29 +79,6 @@ class Product(Base):
     price = Column(Float, nullable=False)
     description = Column(String(255))
     image = Column(String(255))
-
-# Pydantic models
-class UserCreate(BaseModel):
-    username: str
-    email: str
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    email: str
-    image: Optional[str] = None
-
-class ProductCreate(BaseModel):
-    name: str
-    price: float
-    description: Optional[str] = ""
-
-class ProductResponse(BaseModel):
-    id: int
-    name: str
-    price: float
-    description: Optional[str] = None
-    image: Optional[str] = None
 
 # Create tables
 Base.metadata.create_all(bind=engine)

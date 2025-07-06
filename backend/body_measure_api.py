@@ -1,10 +1,7 @@
 
-"""
-Body Measurement API - Alternative entry point focused on body measurement features
-"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from views.body_measure_views import router as body_measure_router
+from api.body_measure import router as body_measure_router
 
 app = FastAPI(title="Body Measurement API")
 

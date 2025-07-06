@@ -1,9 +1,12 @@
 
+"""
+Body Measurement API - Alternative entry point focused on body measurement features
+"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.views.body_measure_views import router as body_measure_router
+from views.body_measure_views import router as body_measure_router
 
-app = FastAPI()
+app = FastAPI(title="Body Measurement API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,4 +16,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(body_measure_router)
+app.include_router(body_measure_router, tags=["body-measure"])
+
+@app.get("/")
+async def root():
+    return {"message": "Body Measurement API - Ready for processing!"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "body-measurement-api"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -1,8 +1,0 @@
-fastapi
-uvicorn[standard]
-python-multipart
-Pillow
-numpy
-opencv-python-headless
-ultralytics  # YOLOv8+Pose
-mediapipe

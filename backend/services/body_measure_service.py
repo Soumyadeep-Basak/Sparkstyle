@@ -4,8 +4,8 @@ from ultralytics import YOLO
 import mediapipe as mp
 from fastapi import UploadFile, BackgroundTasks
 from fastapi.responses import JSONResponse
-from backend.utils.body_measure_utils import parse_image, cm_to_inch, distance, elliptical_circumference
-from backend.utils.cloudinary_utils import upload_image_to_cloudinary
+from utils.body_measure_utils import parse_image, cm_to_inch, distance, elliptical_circumference
+from utils.cloudinary_utils import upload_image_to_cloudinary
 
 # Models
 yolo_model = YOLO("weights/yolov8m-pose.pt")

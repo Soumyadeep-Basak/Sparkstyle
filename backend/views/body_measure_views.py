@@ -1,6 +1,6 @@
 from fastapi import APIRouter, File, UploadFile, Form, BackgroundTasks
 from fastapi.responses import JSONResponse
-from backend.services.body_measure_service import (
+from ..services.body_measure_service import (
     predict_mediapipe_service,
     predict_yolo_service,
     detect_fullbody_service,

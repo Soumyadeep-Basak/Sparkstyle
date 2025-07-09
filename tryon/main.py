@@ -17,7 +17,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.abspath(os.path.join(CURRENT_DIR, "../.env"))
 load_dotenv(dotenv_path=ENV_PATH)
 
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("TRYON_API_KEY")
 
 # Default paths for local testing
 DEFAULT_TEST_DIR = os.path.join(CURRENT_DIR, "test")

@@ -24,6 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '@/constants/Api';
+import { useAuth } from '../extra/auth-context';
 
 const { width, height: screenHeight } = Dimensions.get('window');
 
@@ -108,7 +109,7 @@ const useFullBodyValidator = (kind: 'front' | 'side'): Validator => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30_000);
 
-        const res = await fetch(`${API_BASE_URL}/detect-fullbody`, {
+        const res = await fetch(`${API_BASE_URL}/api/body-measure/detect-fullbody`, {
           method: 'POST',
           body: fd,
           headers: { Accept: 'application/json' },
@@ -155,6 +156,7 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
 
@@ -167,6 +169,12 @@ export default function OnboardingScreen() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const router = useRouter();
+  const { signup, login } = useAuth();
+  const [authLoading, setAuthLoading] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
 
   const pickFromLibrary = useCallback(
     async (kind: 'front' | 'side') => {
@@ -227,6 +235,19 @@ export default function OnboardingScreen() {
     [frontValidator, sideValidator]
   );
 
+  const handleSignup = async () => {
+    if (!name || !email || !password) return;
+    setAuthLoading(true);
+    try {
+      await signup(name, email, password);
+      setStep(2); // Proceed to image upload after successful signup/login
+    } catch (err: any) {
+      Alert.alert('Signup/Login failed', err.message || 'Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleAnalyse = useCallback(async () => {
     if (!frontImage || !sideImage || !height) {
       return Alert.alert('Missing info', 'Please complete all mandatory fields.');
@@ -248,7 +269,7 @@ export default function OnboardingScreen() {
       if (weight) fd.append('weight', weight);
       fd.append('gender', 'other');
 
-      const res = await fetch(`${API_BASE_URL}/predict-avg`, {
+      const res = await fetch(`${API_BASE_URL}/api/body-measure/predict-avg`, {
         method: 'POST',
         body: fd,
       });
@@ -256,12 +277,11 @@ export default function OnboardingScreen() {
       if (data?.error) throw new Error(data.error);
       setResult(data);
       setLoading(false);
-      router.replace('/(tabs)/store');
     } catch (err: any) {
       Alert.alert('Analyse failed', err.message || 'Server error');
       setLoading(false);
     }
-  }, [frontImage, sideImage, height, weight, router]);
+  }, [frontImage, sideImage, height, weight]);
 
   const renderWelcomeStep = () => (
     <View style={styles.container}>
@@ -300,49 +320,131 @@ export default function OnboardingScreen() {
           Get personalized clothing recommendations using AI-powered body analysis. Shop with confidence knowing your size.
         </Text>
 
-        <View style={styles.inputContainer}>
-          <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>Your Name</Text>
-            <TextInput
-              style={styles.premiumInput}
-              placeholder="Enter your name"
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-              placeholderTextColor="#B0B8C4"
-            />
+        {showLogin ? (
+          <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Email Address</Text>
+              <TextInput
+                style={styles.premiumInput}
+                placeholder="Enter your email"
+                value={loginEmail}
+                onChangeText={setLoginEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholderTextColor="#B0B8C4"
+              />
+            </View>
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <TextInput
+                style={styles.premiumInput}
+                placeholder="Enter your password"
+                value={loginPassword}
+                onChangeText={setLoginPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                placeholderTextColor="#B0B8C4"
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.premiumButton, !(loginEmail && loginPassword) && styles.disabledButton]}
+              disabled={!(loginEmail && loginPassword) || loginLoading}
+              onPress={async () => {
+                setLoginLoading(true);
+                try {
+                  await login(loginEmail, loginPassword);
+                  setStep(2);
+                } catch (err: any) {
+                  Alert.alert('Login failed', err.message || 'Please try again.');
+                } finally {
+                  setLoginLoading(false);
+                }
+              }}
+            >
+              <LinearGradient
+                colors={loginEmail && loginPassword ? ['#4ECDC4', '#45B7D1'] : ['#E5E7EB', '#E5E7EB']}
+                style={styles.buttonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {loginLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={[styles.buttonText, !(loginEmail && loginPassword) && styles.disabledButtonText]}>
+                    Login
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowLogin(false)} style={{ marginTop: 16 }}>
+              <Text style={{ color: '#4ECDC4', textAlign: 'center' }}>Don&apos;t have an account? Sign Up</Text>
+            </TouchableOpacity>
           </View>
-          
-          <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>Email Address</Text>
-            <TextInput
-              style={styles.premiumInput}
-              placeholder="Enter your email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholderTextColor="#B0B8C4"
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.premiumButton, !(name && email) && styles.disabledButton]}
-          disabled={!(name && email)}
-          onPress={() => setStep(2)}
-        >
-          <LinearGradient
-            colors={name && email ? ['#FF6B6B', '#FF8E53'] : ['#E5E7EB', '#E5E7EB']}
-            style={styles.buttonGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <Text style={[styles.buttonText, !(name && email) && styles.disabledButtonText]}>
-              Get Started
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        ) : (
+          <>
+            <View style={styles.inputContainer}>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Your Name</Text>
+                <TextInput
+                  style={styles.premiumInput}
+                  placeholder="Enter your name"
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                  placeholderTextColor="#B0B8C4"
+                />
+              </View>
+              
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Email Address</Text>
+                <TextInput
+                  style={styles.premiumInput}
+                  placeholder="Enter your email"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor="#B0B8C4"
+                />
+              </View>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Password</Text>
+                <TextInput
+                  style={styles.premiumInput}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  placeholderTextColor="#B0B8C4"
+                />
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.premiumButton, !(name && email && password) && styles.disabledButton]}
+              disabled={!(name && email && password) || authLoading}
+              onPress={handleSignup}
+            >
+              <LinearGradient
+                colors={name && email && password ? ['#FF6B6B', '#FF8E53'] : ['#E5E7EB', '#E5E7EB']}
+                style={styles.buttonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {authLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={[styles.buttonText, !(name && email && password) && styles.disabledButtonText]}>
+                    Sign Up & Continue
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowLogin(true)} style={{ marginTop: 16 }}>
+              <Text style={{ color: '#4ECDC4', textAlign: 'center' }}>Already have an account? Login</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -441,82 +543,83 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.finalCard}>
-        {sideImage && (
-          <View style={styles.selectedImagePreview}>
-            <Image source={{ uri: sideImage }} style={styles.previewImage} />
-            <Text style={styles.imageLabel}>Side View ✓</Text>
-          </View>
-        )}
-
-        <View style={styles.measurementInputs}>
-          <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>Height (cm) *</Text>
-            <TextInput
-              style={styles.premiumInput}
-              placeholder="Enter height in cm"
-              keyboardType="numeric"
-              value={height}
-              onChangeText={setHeight}
-              placeholderTextColor="#B0B8C4"
-            />
-          </View>
-          
-          <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>Weight (kg)</Text>
-            <TextInput
-              style={styles.premiumInput}
-              placeholder="Enter weight (optional)"
-              keyboardType="numeric"
-              value={weight}
-              onChangeText={setWeight}
-              placeholderTextColor="#B0B8C4"
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.premiumButton,
-            styles.analyzeButton,
-            (!(sideImage && height) || loading) && styles.disabledButton
-          ]}
-          disabled={!(sideImage && height) || loading}
-          onPress={handleAnalyse}
-        >
-          <LinearGradient
-            colors={
-              sideImage && height && !loading
-                ? ['#10B981', '#059669']
-                : ['#E5E7EB', '#E5E7EB']
-            }
-            style={styles.buttonGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color="#fff" size="small" />
-                <Text style={styles.loadingText}>Analyzing...</Text>
-              </View>
-            ) : (
-              <Text style={[
-                styles.buttonText,
-                (!(sideImage && height) || loading) && styles.disabledButtonText
-              ]}>
-                ✨ Get My Recommendations
-              </Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Show API result if available */}
-        {result && (
+        {result ? (
           <View style={styles.resultCard}>
             <Text style={styles.resultTitle}>API Result</Text>
             <ScrollView style={styles.resultScroll}>
               <Text style={styles.resultText}>{JSON.stringify(result, null, 2)}</Text>
             </ScrollView>
           </View>
+        ) : (
+          <>
+            {sideImage && (
+              <View style={styles.selectedImagePreview}>
+                <Image source={{ uri: sideImage }} style={styles.previewImage} />
+                <Text style={styles.imageLabel}>Side View ✓</Text>
+              </View>
+            )}
+
+            <View style={styles.measurementInputs}>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Height (cm) *</Text>
+                <TextInput
+                  style={styles.premiumInput}
+                  placeholder="Enter height in cm"
+                  keyboardType="numeric"
+                  value={height}
+                  onChangeText={setHeight}
+                  placeholderTextColor="#B0B8C4"
+                />
+              </View>
+              
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Weight (kg)</Text>
+                <TextInput
+                  style={styles.premiumInput}
+                  placeholder="Enter weight (optional)"
+                  keyboardType="numeric"
+                  value={weight}
+                  onChangeText={setWeight}
+                  placeholderTextColor="#B0B8C4"
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.premiumButton,
+                styles.analyzeButton,
+                (!(sideImage && height) || loading) && styles.disabledButton
+              ]}
+              disabled={!(sideImage && height) || loading}
+              onPress={handleAnalyse}
+            >
+              <LinearGradient
+                colors={
+                  sideImage && height && !loading
+                    ? ['#10B981', '#059669']
+                    : ['#E5E7EB', '#E5E7EB']
+                }
+                style={styles.buttonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator color="#fff" size="small" />
+                    <Text style={styles.loadingText}>Analyzing...</Text>
+                  </View>
+                ) : (
+                  <Text style={[
+                    styles.buttonText,
+                    (!(sideImage && height) || loading) && styles.disabledButtonText
+                  ]}>
+                    ✨ Get My Recommendations
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </>
         )}
       </View>
     </View>

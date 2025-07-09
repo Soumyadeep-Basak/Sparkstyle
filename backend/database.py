@@ -29,6 +29,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(80), unique=True, nullable=False)
     email = Column(String(120), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
     image = Column(String(255))
     
     images = relationship("UserImage", back_populates="user")

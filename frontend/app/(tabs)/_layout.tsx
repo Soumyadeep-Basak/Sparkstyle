@@ -13,16 +13,16 @@ const HomeIcon = ({ color }: { color: string }) => (
   <IconSymbol size={28} name="house.fill" color={color} />
 );
 
-const MeasureIcon = ({ color }: { color: string }) => (
-  <IconSymbol size={28} name="camera.fill" color={color} />
-);
-
 const StoreIcon = ({ color }: { color: string }) => (
   <IconSymbol size={28} name="cart.fill" color={color} />
 );
 
 const ScanIcon = ({ color }: { color: string }) => (
-  <IconSymbol size={28} name="barcode.viewfinder" color={color} />
+  <IconSymbol size={28} name="camera.fill" color={color} />
+);
+
+const ProfileIcon = ({ color }: { color: string }) => (
+  <IconSymbol size={28} name="person.crop.circle" color={color} />
 );
 
 export default function TabLayout() {
@@ -75,20 +75,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="explore"
-          options={{
-            title: 'Explore',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="image-upload"
-          options={{
-            title: 'Image',
-            tabBarIcon: MeasureIcon,
-          }}
-        />
-        <Tabs.Screen
           name="qr-scan"
           options={{
             title: 'QR Scan',
@@ -100,6 +86,13 @@ export default function TabLayout() {
           options={{
             title: 'Store',
             tabBarIcon: StoreIcon,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ProfileIcon,
           }}
         />
       </Tabs>

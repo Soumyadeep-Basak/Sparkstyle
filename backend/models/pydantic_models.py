@@ -11,6 +11,7 @@ class ImageType(str, Enum):
 class UserCreate(BaseModel):
     username: str
     email: str
+    password: str
 
 
 class UserResponse(BaseModel):
@@ -45,3 +46,8 @@ class ProductResponse(BaseModel):
     price: float
     description: Optional[str] = None
     image: Optional[str] = None
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str

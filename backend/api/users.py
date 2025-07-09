@@ -4,9 +4,12 @@ import shutil
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List
+from passlib.context import CryptContext
+import jwt
+from datetime import datetime, timedelta
 
 from database import get_db, User, UserImage
-from models import UserCreate, UserResponse, UserImageCreate, UserImageResponse, ImageType
+from models import UserCreate, UserResponse, UserImageCreate, UserImageResponse, ImageType, UserLogin
 from utils.cloudinary_utils import upload_and_save_user_image
 
 router = APIRouter()
@@ -16,12 +19,19 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+SECRET_KEY = "your_secret_key_here"  # Replace with a secure key in production
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
 def allowed_file(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @router.post("/", response_model=UserResponse)
 async def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = User(username=user.username, email=user.email)
+    hashed_password = pwd_context.hash(user.password)
+    db_user = User(username=user.username, email=user.email, password_hash=hashed_password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -82,3 +92,18 @@ async def get_user_images(user_id: int, db: Session = Depends(get_db)):
     
     images = db.query(UserImage).filter(UserImage.user_id == user_id).all()
     return images
+
+@router.post("/login")
+async def login(user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    # Create JWT token
+    to_encode = {
+        "sub": str(db_user.id),
+        "username": db_user.username,
+        "email": db_user.email,
+        "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    }
+    token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return {"access_token": token, "token_type": "bearer", "user": {"id": db_user.id, "username": db_user.username, "email": db_user.email}}

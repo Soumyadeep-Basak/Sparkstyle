@@ -97,7 +97,7 @@ export default function ImageUploadScreen() {
           name: `photo.${fileType}`,
           type: `image/${fileType}`,
         } as any);
-        const response = await fetch(`${API_BASE_URL}/detect-fullbody`, {
+        const response = await fetch(`${API_BASE_URL}/api/body-measure/detect-fullbody`, {
           method: 'POST',
           body: formData,
         });
@@ -156,7 +156,7 @@ export default function ImageUploadScreen() {
         return fd;
       };
 
-      const response = await fetch(`${API_BASE_URL}/predict-avg`, {
+      const response = await fetch(`${API_BASE_URL}/api/body-measure/predict-avg`, {
         method: 'POST',
         body: makeFormData(),
       });

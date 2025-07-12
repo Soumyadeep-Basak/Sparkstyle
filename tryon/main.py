@@ -1,101 +1,104 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import FileResponse, JSONResponse
+import requests, os, time, shutil
 from dotenv import load_dotenv
-import requests
-import base64
-import time
-import os
+from uuid import uuid4
 
-# Set up FastAPI
+# Load API keys
+load_dotenv()
+glam_api_key = os.getenv("GLAM_API_KEY")
+imgbb_api_key = os.getenv("IMGBB_API_KEY")
+
 app = FastAPI()
 
-# Get current directory (tryon/)
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Upload to imgbb
+def upload_to_imgbb(file_path: str):
+    print(f"⬆️ Uploading {file_path} to imgbb...")
+    with open(file_path, "rb") as f:
+        url = "https://api.imgbb.com/1/upload"
+        payload = {"key": imgbb_api_key}
+        files = {"image": f}
+        r = requests.post(url, data=payload, files=files)
+        if r.status_code == 200:
+            image_url = r.json()["data"]["url"]
+            print(f"✅ Uploaded to: {image_url}")
+            return image_url
+        else:
+            print("❌ Upload failed:", r.text)
+            return None
 
-# Load .env from Sparkathon/.env
-ENV_PATH = os.path.abspath(os.path.join(CURRENT_DIR, "../.env"))
-load_dotenv(dotenv_path=ENV_PATH)
+@app.post("/virtual-tryon/")
+async def virtual_tryon(
+    media: UploadFile = File(...),
+    garment: UploadFile = File(...),
+    mask_type: str = Form("overall")
+):
+    if not glam_api_key or not imgbb_api_key:
+        raise HTTPException(status_code=500, detail="Missing API keys.")
 
-API_KEY = os.getenv("TRYON_API_KEY")
+    # Save temp files
+    media_path = f"temp_{uuid4().hex}_{media.filename}"
+    garment_path = f"temp_{uuid4().hex}_{garment.filename}"
 
-# Default paths for local testing
-DEFAULT_TEST_DIR = os.path.join(CURRENT_DIR, "test")
-DEFAULT_PERSON_PATH = os.path.join(DEFAULT_TEST_DIR, "person.jpg")
-DEFAULT_GARMENT_PATH = os.path.join(DEFAULT_TEST_DIR, "garment.jpg")
-DEFAULT_OUTPUT_PATH = os.path.join(DEFAULT_TEST_DIR, "tryon_result.jpg")
+    with open(media_path, "wb") as f:
+        shutil.copyfileobj(media.file, f)
+    with open(garment_path, "wb") as f:
+        shutil.copyfileobj(garment.file, f)
 
-# Input model
-class TryOnRequest(BaseModel):
-    person_path: str = DEFAULT_PERSON_PATH
-    garment_path: str = DEFAULT_GARMENT_PATH
-    output_path: str = DEFAULT_OUTPUT_PATH
+    try:
+        media_url = upload_to_imgbb(media_path)
+        garment_url = upload_to_imgbb(garment_path)
 
+        if not media_url or not garment_url:
+            raise HTTPException(status_code=400, detail="Image upload to imgbb failed.")
 
-def generate_tryon(api_key: str, person_path: str, garment_path: str, fast_mode: bool = True) -> dict:
-    headers = {'Authorization': f'Bearer {api_key}'}
-    data = {'fast_mode': 'true'} if fast_mode else {}
-
-    with open(person_path, 'rb') as pfile, open(garment_path, 'rb') as gfile:
-        files = {
-            'person_images': ('person.jpg', pfile, 'image/jpeg'),
-            'garment_images': ('garment.jpg', gfile, 'image/jpeg')
+        # Send to Glam API
+        payload = {
+            "mask_type": mask_type,
+            "media_url": media_url,
+            "garment_url": garment_url
+        }
+        headers = {
+            "X-API-Key": glam_api_key,
+            "accept": "application/json",
+            "content-type": "application/json"
         }
 
-        response = requests.post(
-            'https://tryon-api.com/api/v1/tryon',
-            headers=headers,
-            files=files,
-            data=data
-        )
+        print("🚀 Sending to GLAM API...")
+        response = requests.post("https://api.glam.ai/api/v1/tryon", json=payload, headers=headers)
 
-    if response.status_code == 400:
-        raise HTTPException(status_code=400, detail=f"Bad Request: {response.text}")
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
 
-    response.raise_for_status()
-    job = response.json()
-    status_url = job['statusUrl']
+        event_id = response.json().get("event_id")
+        if not event_id:
+            raise HTTPException(status_code=500, detail="No event_id in response.")
 
-    while True:
-        time.sleep(2)
-        status_resp = requests.get(f"https://tryon-api.com{status_url}", headers=headers)
-        status_resp.raise_for_status()
-        payload = status_resp.json()
-        status = payload.get("status")
+        print(f"🎯 Event ID: {event_id}")
+        status_url = f"https://api.glam.ai/api/v1/tryon/{event_id}"
 
-        if status == "completed":
-            return {
-                "imageUrl": payload.get("imageUrl"),
-                "imageBase64": payload.get("imageBase64")
-            }
-        elif status == "failed":
-            raise HTTPException(
-                status_code=500,
-                detail=f"Tryon job failed: {payload.get('error')} ({payload.get('errorCode')})"
-            )
+        # Polling loop
+        while True:
+            time.sleep(2)
+            res = requests.get(status_url, headers={"X-API-Key": glam_api_key}).json()
+            if res.get("status") == "READY":
+                output_url = res["media_urls"][0]
+                break
+            elif res.get("status") == "FAILED":
+                raise HTTPException(status_code=500, detail="Try-on generation failed.")
+            else:
+                print(f"⌛ Waiting... Status: {res.get('status')}")
 
+        # Download result
+        output_path = f"tryon_{uuid4().hex}.jpg"
+        img_data = requests.get(output_url)
+        with open(output_path, "wb") as f:
+            f.write(img_data.content)
 
-def save_image(result: dict, output_path: str):
-    if result.get("imageUrl"):
-        image_data = requests.get(result["imageUrl"]).content
-    elif result.get("imageBase64"):
-        image_data = base64.b64decode(result["imageBase64"])
-    else:
-        raise ValueError("No image data in result.")
+        return FileResponse(output_path, media_type="image/jpeg", filename="tryon.jpg")
 
-    with open(output_path, "wb") as f:
-        f.write(image_data)
-
-
-@app.post("/generate-tryon")
-def tryon_generate(request: TryOnRequest):
-    if not API_KEY:
-        raise HTTPException(status_code=500, detail="API_KEY not set in environment.")
-
-    if not os.path.exists(request.person_path) or not os.path.exists(request.garment_path):
-        raise HTTPException(status_code=404, detail="Person or Garment image not found.")
-
-    result = generate_tryon(API_KEY, request.person_path, request.garment_path, fast_mode=True)
-    save_image(result, request.output_path)
-
-    return FileResponse(path=request.output_path, filename="tryon_result.jpg", media_type="image/jpeg")
+    finally:
+        # Cleanup temp
+        for path in [media_path, garment_path]:
+            if os.path.exists(path):
+                os.remove(path)

@@ -144,7 +144,7 @@ export default function StoreScreen() {
             <View style={styles.headerLeft}>
               <Image source={require('@/assets/images/icon.png')} style={styles.headerLogo} />
               <View style={styles.headerText}>
-                <Text style={styles.welcomeText}>StyleFit</Text>
+                <Text style={styles.welcomeText}>Spark Style</Text>
                 <Text style={styles.headerSubtitle}>Your Perfect Fit Store</Text>
               </View>
             </View>

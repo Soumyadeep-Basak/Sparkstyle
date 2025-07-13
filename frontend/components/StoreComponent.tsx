@@ -41,7 +41,7 @@ export default function StoreComponent({ onExploreTryOn }: { onExploreTryOn?: ()
       >
         {/* Hero Section */}
         <View style={styles.heroSection}>
-          <Text style={styles.heroTitle}>Welcome to Sparkathon Store</Text>
+          <Text style={styles.heroTitle}>Welcome to Spark Style Store</Text>
           <Text style={styles.heroSubtitle}>
             Discover the future of fashion shopping with AI and Virtual Try-On
           </Text>

@@ -337,9 +337,9 @@ export default function OnboardingScreen() {
           </View>
         </View>
         
-        <Text style={styles.welcomeTitle}>Find Your Perfect Fit</Text>
+        <Text style={styles.welcomeTitle}>Find Your Perfect Fit with Spark Style</Text>
         <Text style={styles.welcomeDescription}>
-          Get personalized clothing recommendations using AI-powered body analysis.
+          Get personalized clothing recommendations using AI-powered body analysis from Spark Style.
         </Text>
 
         <View style={styles.authToggle}>

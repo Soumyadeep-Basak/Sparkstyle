@@ -294,6 +294,7 @@ export default function OnboardingScreen() {
       if (data?.error) throw new Error(data.error);
       
       console.log('Analysis completed successfully');
+      console.log('Analysis data:', JSON.stringify(data, null, 2));
       setResult(data);
       setLoading(false);
     } catch (err: any) {
@@ -580,7 +581,18 @@ export default function OnboardingScreen() {
             <View style={styles.resultContent}>
               <View style={styles.sizeContainer}>
                 <Text style={styles.sizeLabel}>RECOMMENDED SIZE</Text>
-                <Text style={styles.sizeValue}>XL</Text>
+                <Text style={styles.sizeValue}>
+                  {(() => {
+                    // Calculate size based on chest measurement
+                    const chestInches = result.average?.chest_in || 0;
+                    if (chestInches < 34) return "XS";
+                    else if (chestInches < 38) return "S";
+                    else if (chestInches < 42) return "M";
+                    else if (chestInches < 46) return "L";
+                    else if (chestInches < 50) return "XL";
+                    else return "XXL";
+                  })()}
+                </Text>
                 <Text style={styles.sizePerfect}>Perfect Match!</Text>
               </View>
               
@@ -591,7 +603,7 @@ export default function OnboardingScreen() {
                   </View>
                   <Text style={styles.measurementLabel}>Shoulder</Text>
                   <Text style={styles.measurementValue}>
-                    {result.shoulder_in ? `${result.shoulder_in.toFixed(1)}″` : '- -'}
+                    {result.average?.shoulder_in ? `${result.average.shoulder_in.toFixed(1)}″` : '- -'}
                   </Text>
                 </View>
                 
@@ -601,7 +613,7 @@ export default function OnboardingScreen() {
                   </View>
                   <Text style={styles.measurementLabel}>Chest</Text>
                   <Text style={styles.measurementValue}>
-                    {result.chest_in ? `${result.chest_in.toFixed(1)}″` : '- -'}
+                    {result.average?.chest_in ? `${result.average.chest_in.toFixed(1)}″` : '- -'}
                   </Text>
                 </View>
                 
@@ -611,14 +623,20 @@ export default function OnboardingScreen() {
                   </View>
                   <Text style={styles.measurementLabel}>Waist</Text>
                   <Text style={styles.measurementValue}>
-                    {result.waist_in ? `${result.waist_in.toFixed(1)}″` : '- -'}
+                    {result.average?.waist_in ? `${result.average.waist_in.toFixed(1)}″` : '- -'}
+                  </Text>
+                </View>
+
+                <View style={styles.measurementItem}>
+                  <View style={styles.measurementIconContainer}>
+                    <Text style={styles.measurementIcon}>📏</Text>
+                  </View>
+                  <Text style={styles.measurementLabel}>Inseam</Text>
+                  <Text style={styles.measurementValue}>
+                    {result.average?.inseam_in ? `${result.average.inseam_in.toFixed(1)}″` : '- -'}
                   </Text>
                 </View>
               </View>
-              
-              <TouchableOpacity style={styles.viewAllButton} onPress={() => Alert.alert('All Measurements', JSON.stringify(result, null, 2))}>
-                <Text style={styles.viewAllButtonText}>View All Measurements</Text>
-              </TouchableOpacity>
               
               <TouchableOpacity
                 style={styles.shopNowButton}
@@ -630,7 +648,7 @@ export default function OnboardingScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                 >
-                  <Text style={styles.buttonText}>Shop Now With Your Size</Text>
+                  <Text style={styles.buttonText}>Continue Shopping</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -1239,12 +1257,17 @@ const styles = StyleSheet.create({
   viewAllButton: {
     paddingVertical: 12,
     alignItems: 'center',
-    marginBottom: 20,
+    flex: 1,
   },
   viewAllButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#4ECDC4',
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
   },
   shopNowButton: {
     borderRadius: 16,

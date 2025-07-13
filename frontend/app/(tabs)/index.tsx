@@ -730,7 +730,7 @@ export default function OnboardingScreen() {
                       styles.buttonText,
                       (!(sideImage && height) || loading) && styles.disabledButtonText
                     ]}>
-                      ✨ Get My Recommendations
+                      ✨ Analyze my Fit
                     </Text>
                   )}
                 </LinearGradient>

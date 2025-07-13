@@ -87,34 +87,33 @@ export default function TabLayout() {
             textAlign: 'center',
           },
         }}
-<<<<<<< Updated upstream
       >
         <Tabs.Screen
           name="index"
           options={{
-        title: 'Home',
-        tabBarIcon: HomeIcon,
+            title: 'Home',
+            tabBarIcon: HomeIcon,
           }}
         />
         <Tabs.Screen
           name="tryon"
           options={{
-        title: 'Try On',
-        tabBarIcon: TryOnIcon,
+            title: 'Try On',
+            tabBarIcon: TryOnIcon,
           }}
         />
         <Tabs.Screen
           name="store"
           options={{
-        title: 'Store',
-        tabBarIcon: StoreIcon,
+            title: 'Store',
+            tabBarIcon: StoreIcon,
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
-        title: 'Profile',
-        tabBarIcon: ProfileIcon,
+            title: 'Profile',
+            tabBarIcon: ProfileIcon,
           }}
         />
         <Tabs.Screen
@@ -126,30 +125,5 @@ export default function TabLayout() {
         />
       </Tabs>
     </AnalysisResultContext.Provider>
-=======
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="image-upload"
-        options={{
-          title: 'Image',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="camera.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="qr-scan"
-        options={{
-          title: 'QR Scan',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="qrcode" color={color} />,
-        }}
-      />
-    </Tabs>
->>>>>>> Stashed changes
   );
 }

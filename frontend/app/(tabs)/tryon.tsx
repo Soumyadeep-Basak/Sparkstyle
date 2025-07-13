@@ -10,28 +10,41 @@ import {
   ScrollView, 
   FlatList, 
   Modal, 
-  Animated 
+  Animated, 
+  Dimensions
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const SUIT_IMAGE = require('../../assets/images/suit.jpg');
-const DEMO_IMAGE = require('../../assets/images/demo.jpg');
+const DEMO_IMAGE = require('../../assets/images/demo.png');
+const DEMO2_IMAGE = require('../../assets/images/demo2.png');
+const PROD_IMAGE = require('../../assets/images/prod.jpg');
+const SIMI_IMAGES = [
+  require('../../assets/images/simi1.png'),
+  require('../../assets/images/simi2.png'),
+  require('../../assets/images/simi3.png'),
+];
+const RECOM_IMAGES = [
+  require('../../assets/images/recom4.jpg'),
+  require('../../assets/images/recom2.jpg'),
+  require('../../assets/images/recom3.jpg'),
+  require('../../assets/images/recom1.jpg'),
+];
 
 // Mock data for similar products
 const SIMILAR_PRODUCTS = [
-  { id: 1, name: 'Blue Shirt', price: 39.99 },
-  { id: 2, name: 'White Tee', price: 24.99 },
-  { id: 3, name: 'Black Jacket', price: 59.99 },
-  { id: 4, name: 'Gray Hoodie', price: 44.99 },
+  { id: 1, name: 'Grey Suut', price: 3099 },
+  { id: 2, name: 'Black Suit', price: 2499 },
+  { id: 3, name: 'Beige Jacket', price: 999 },
 ];
 
 // Mock data for recommended products
 const RECOMMENDED_PRODUCTS = [
-  { id: 5, name: 'Denim Jeans', price: 49.99 },
-  { id: 6, name: 'Chino Pants', price: 39.99 },
-  { id: 7, name: 'Sneakers', price: 79.99 },
-  { id: 8, name: 'Leather Wallet', price: 29.99 },
+  { id: 8, name: 'Blue Pants', price: 29.99 },
+  { id: 6, name: 'White Shirt', price: 39.99 },
+  { id: 7, name: 'Black Tie', price: 79.99 },
+  { id: 5, name: 'Blue Shirt', price: 49.99 },
 ];
 
 export default function TryOnScreen() {
@@ -46,6 +59,13 @@ export default function TryOnScreen() {
   const [cart, setCart] = useState<any[]>([]);
   const bottomSheetAnim = useRef(new Animated.Value(0)).current;
   const [showPerfectSize, setShowPerfectSize] = useState(false);
+  const [mainResultImage, setMainResultImage] = useState(DEMO_IMAGE);
+  // Add a state to track if analyzing from try button
+  const [analyzingFromTry, setAnalyzingFromTry] = useState(false);
+  const [compareModalVisible, setCompareModalVisible] = useState(false);
+  const [compareAnalyzing, setCompareAnalyzing] = useState(false);
+  const [compareResultVisible, setCompareResultVisible] = useState(false);
+  const screenHeight = Dimensions.get('window').height;
 
   useEffect(() => {
     (async () => {
@@ -84,6 +104,7 @@ export default function TryOnScreen() {
     setProduct(null);
     setTryOnResult(false);
     setAddedToCart(false);
+    setMainResultImage(DEMO_IMAGE);
   };
 
   const handleAddToCart = () => {
@@ -112,21 +133,35 @@ export default function TryOnScreen() {
     });
   };
 
-  const renderSimilarProductItem = ({ item }: { item: any }) => (
-    <View style={styles.similarProductItem}>
-      <Image source={DEMO_IMAGE} style={styles.similarProductImage} />
-      <Text style={styles.similarProductName}>{item.name}</Text>
-      <Text style={styles.similarProductPrice}>${item.price}</Text>
-    </View>
-  );
+  // Handler for Try button on product cards
+  const handleTryProduct = () => {
+    // If currently showing recommended products, switch back to similar products
+    if (addedToCart) {
+      setAddedToCart(false);
+    }
+    setAnalyzingFromTry(true);
+    setTimeout(() => {
+      setMainResultImage(DEMO2_IMAGE);
+      setAnalyzingFromTry(false);
+    }, 2500); // 2.5 seconds
+  };
 
-  const renderRecommendedProductItem = ({ item }: { item: any }) => (
-    <View style={styles.recommendedProductItem}>
-      <Image source={DEMO_IMAGE} style={styles.recommendedProductImage} />
-      <Text style={styles.recommendedProductName}>{item.name}</Text>
-      <Text style={styles.recommendedProductPrice}>${item.price}</Text>
-    </View>
-  );
+  // Handler for Compare Mode
+  const handleCompareMode = () => {
+    setCompareModalVisible(true);
+    setCompareAnalyzing(true);
+    setCompareResultVisible(false);
+    setTimeout(() => {
+      setCompareAnalyzing(false);
+      setCompareResultVisible(true);
+    }, 3500); // Increased to 3.5 seconds
+  };
+  const closeCompareModal = () => {
+    setCompareModalVisible(false);
+    setCompareAnalyzing(false);
+    setCompareResultVisible(false);
+  };
+
 
   if (hasPermission === null) {
     return (
@@ -145,14 +180,32 @@ export default function TryOnScreen() {
   }
 
   if (tryOnResult) {
-    const listData = addedToCart ? RECOMMENDED_PRODUCTS : SIMILAR_PRODUCTS.slice(0, 3);
+    const listData = addedToCart ? RECOMMENDED_PRODUCTS : SIMILAR_PRODUCTS;
     return (
-      <View style={{ flex: 1, backgroundColor: '#f8f9fa', paddingHorizontal: 12, paddingTop: 8 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 90 }}>
+      <View style={{ flex: 1, minHeight: screenHeight, backgroundColor: '#f8f9fa', paddingHorizontal: 12 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: screenHeight * 0.2, paddingTop: 8 }}>
             <View style={styles.resultContainer}>
               <View style={styles.tryonFrame}>
-                <Image source={DEMO_IMAGE} style={styles.resultImage} resizeMode="cover" />
-                {showPerfectSize && (
+                {/* Show loader if analyzingFromTry, else show mainResultImage */}
+                {analyzingFromTry ? (
+                  <View style={[styles.scannerContainer, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', height: 400 }]}> 
+                    <Image source={PROD_IMAGE} style={{ width: 180, height: 240, borderRadius: 16, marginBottom: 10 }} resizeMode="contain" />
+                    <LinearGradient
+                      colors={["#4E54C8", "#8F94FB"]}
+                      style={styles.analyzingGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <ActivityIndicator size="large" color="#FFD93D" />
+                      <Text style={styles.analyzingText}>Analyzing with AI...</Text>
+                    </LinearGradient>
+                    {/* Show SUIT_IMAGE below the loader */}
+                    {/* <Image source={SUIT_IMAGE} style={{ width: 120, height: 160, borderRadius: 12, marginTop: 16 }} resizeMode="contain" /> */}
+                  </View>
+                ) : (
+                  <Image source={mainResultImage} style={styles.resultImage} resizeMode="cover" />
+                )}
+                {showPerfectSize && !analyzingFromTry && (
                   <View style={styles.sizePerfectBadge}>
                     <Text style={styles.sizePerfectText}>Size: Perfect!</Text>
                   </View>
@@ -176,49 +229,69 @@ export default function TryOnScreen() {
               showsHorizontalScrollIndicator={false}
               keyExtractor={item => item.id.toString()}
               contentContainerStyle={{ paddingVertical: 10 }}
-              renderItem={({ item }) => (
+              renderItem={({ item, index }) => (
                 <View style={{ width: 160, marginRight: 16, backgroundColor: '#fff', borderRadius: 12, alignItems: 'center', padding: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
-                  <Image source={DEMO_IMAGE} style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
+                  <Image source={SIMI_IMAGES[index % SIMI_IMAGES.length]} style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
                   <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>{item.name}</Text>
-                  <Text style={{ fontSize: 14, color: '#007AFF', fontWeight: '600' }}>${item.price}</Text>
+                  <Text style={{ fontSize: 14, color: '#007AFF', fontWeight: '600' }}>₹{item.price}</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <TouchableOpacity style={{ backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginRight: 0 }} onPress={handleTryProduct}>
+                      <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Try</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: '#FFD93D', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 }} onPress={handleCompareMode}>
+                      <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 14 }}>Compare</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
             />
           )}
-          {/* Recommended Products Grid (if addedToCart) */}
+          {/* Recommended Products Carousel (if addedToCart) */}
           {addedToCart && (
-            <View style={{ marginBottom: 20 }}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                {listData.map((item) => (
-                  <View key={item.id} style={{ width: '48%', marginBottom: 18, backgroundColor: '#fff', borderRadius: 12, alignItems: 'center', padding: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
-                    <Image source={DEMO_IMAGE} style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
-                    <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>{item.name}</Text>
-                    <Text style={{ fontSize: 14, color: '#007AFF', fontWeight: '600' }}>${item.price}</Text>
+            <FlatList
+              data={listData}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={item => item.id.toString()}
+              contentContainerStyle={{ paddingVertical: 10 }}
+              renderItem={({ item, index }) => (
+                <View style={{ width: 160, marginRight: 16, backgroundColor: '#fff', borderRadius: 12, alignItems: 'center', padding: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
+                  <Image source={RECOM_IMAGES[index % RECOM_IMAGES.length]} style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
+                  <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>{item.name}</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <TouchableOpacity style={{ backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginRight: 0 }} onPress={handleTryProduct}>
+                      <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Try</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: '#FFD93D', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 }} onPress={handleCompareMode}>
+                      <Text style={{ color: '#333', fontWeight: 'bold', fontSize: 14 }}>Compare</Text>
+                    </TouchableOpacity>
                   </View>
-                ))}
-              </View>
-            </View>
+                </View>
+              )}
+            />
           )}
         </ScrollView>
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 75, paddingBottom: 24, paddingHorizontal: 16, backgroundColor: 'transparent', alignItems: 'center' }}>
-              <TouchableOpacity 
-            style={{ width: '100%', borderRadius: 16, shadowColor: '#4E54C8', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4 }} 
-                onPress={handleAddToCart}
-                disabled={addedToCart}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={addedToCart ? ['#b2b2b2', '#b2b2b2'] : ['#43E97B', '#38F9D7']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{ borderRadius: 16, paddingVertical: 16, alignItems: 'center' }}
+        {/* Add to Cart button - only show if not addedToCart */}
+        {!addedToCart && (
+          <View style={{ marginTop: 30, marginBottom: 110, paddingHorizontal: 16 }}>
+            <TouchableOpacity 
+              style={{ borderRadius: 16, shadowColor: '#4E54C8', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4 }} 
+              onPress={handleAddToCart}
+              activeOpacity={0.85}
             >
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 1.1 }}>
-                {addedToCart ? "Added to Cart" : "Add to Cart"}
-              </Text>
-            </LinearGradient>
-              </TouchableOpacity>
-            </View>
+              <LinearGradient
+                colors={['#43E97B', '#38F9D7']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ borderRadius: 16, paddingVertical: 16, alignItems: 'center' }}
+              >
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 1.1 }}>
+                  Add to Cart
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
         <Modal
           transparent={true}
           visible={recommendedModalVisible}
@@ -249,20 +322,56 @@ export default function TryOnScreen() {
             <Text style={styles.recommendedTitle}>Recommended For You</Text>
             <FlatList
               data={RECOMMENDED_PRODUCTS}
-              renderItem={({ item }) => (
-                <View style={styles.recommendedProductItem}>
-                  <Image source={DEMO_IMAGE} style={styles.recommendedProductImageFixed} />
-                  <Text style={styles.recommendedProductName}>{item.name}</Text>
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={item => item.id.toString()}
+              contentContainerStyle={{ paddingVertical: 10 }}
+              renderItem={({ item, index }) => (
+                <View style={{ width: 160, marginRight: 16, backgroundColor: '#fff', borderRadius: 12, alignItems: 'center', padding: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 }}>
+                  <Image source={RECOM_IMAGES[index % RECOM_IMAGES.length]} style={{ width: 120, height: 120, borderRadius: 8, marginBottom: 8 }} />
+                  <Text style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>{item.name}</Text>
                 </View>
               )}
-              keyExtractor={item => item.id.toString()}
-              numColumns={2}
-              columnWrapperStyle={styles.recommendedColumnWrapper}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              showsVerticalScrollIndicator={false}
-              key={'modal-recommended'}
             />
           </Animated.View>
+        </Modal>
+        {/* Compare Mode Modal */}
+        <Modal
+          transparent={true}
+          visible={compareModalVisible}
+          animationType="fade"
+          onRequestClose={closeCompareModal}
+        >
+          <View style={styles.compareModalOverlay}>
+            <View style={styles.compareModalContent}>
+              <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16, color: '#333' }}>Compare Mode</Text>
+              <View style={styles.compareImagesRow}>
+                <View style={[styles.compareImageWrapper, compareResultVisible && styles.winningImageWrapper]}>
+                  <Image source={SUIT_IMAGE} style={styles.compareImage} resizeMode="contain" />
+                  {compareResultVisible && (
+                    <Text style={styles.trophyBelow}>🏆</Text>
+                  )}
+                </View>
+                <View style={styles.compareImageWrapper}>
+                  <Image source={SIMI_IMAGES[0]} style={styles.compareImage} resizeMode="contain" />
+                </View>
+              </View>
+              {compareAnalyzing && (
+                <View style={{ marginTop: 24, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#4E54C8" style={{ marginBottom: 10 }} />
+                  <Text style={{ fontSize: 16, color: '#666', fontWeight: '500' }}>Analyzing the user data and product data...</Text>
+                </View>
+              )}
+              {compareResultVisible && (
+                <Text style={{ marginTop: 24, fontSize: 16, color: '#333', fontWeight: '600', textAlign: 'center' }}>
+                  Based on the product data and your body data, the perfect attire will be the first image.
+                </Text>
+              )}
+              <TouchableOpacity style={styles.compareCloseButton} onPress={closeCompareModal}>
+                <Text style={{ color: '#007AFF', fontWeight: 'bold', fontSize: 16 }}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </Modal>
       </View>
     );
@@ -294,7 +403,7 @@ export default function TryOnScreen() {
       {/* Show suit image and analyzing overlay if analyzingProduct is true */}
       {analyzingProduct && !tryOnResult && (
         <View style={[styles.scannerContainer, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }]}> 
-          <Image source={SUIT_IMAGE} style={{ width: 180, height: 240, borderRadius: 16, marginBottom: 10 }} resizeMode="contain" />
+          <Image source={PROD_IMAGE} style={{ width: 180, height: 240, borderRadius: 16, marginBottom: 10 }} resizeMode="contain" />
           <LinearGradient
             colors={["#4E54C8", "#8F94FB"]}
             style={styles.analyzingGradient}
@@ -315,7 +424,7 @@ export default function TryOnScreen() {
             resizeMode="cover" 
           />
           <Text style={styles.productName}>{product.name}</Text>
-          <Text style={styles.productPrice}>${product.price}</Text>
+          <Text style={styles.productPrice}>₹{product.price}</Text>
           
           {analyzingProduct && (
             <View style={styles.analyzingOverlay}>
@@ -693,5 +802,86 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#007AFF',
     fontWeight: '600',
+  },
+  compareModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  compareModalContent: {
+    backgroundColor: '#f8fafd', // softer background
+    borderRadius: 24,
+    padding: 28,
+    width: 360,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  compareImagesRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    marginBottom: 8,
+    gap: 24,
+  },
+  compareImageWrapper: {
+    alignItems: 'center',
+    position: 'relative',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 8,
+    marginHorizontal: 4,
+  },
+  winningImageWrapper: {
+    borderWidth: 3,
+    borderColor: '#FFD93D',
+    shadowColor: '#FFD93D',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  trophyBelow: {
+    marginTop: 8,
+    fontSize: 32,
+    textAlign: 'center',
+    shadowColor: '#FFD93D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  compareImage: {
+    width: 100,
+    height: 140,
+    borderRadius: 12,
+    marginBottom: 0,
+    borderWidth: 2,
+    borderColor: '#eee',
+  },
+  trophyOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: '50%',
+    transform: [{ translateX: -16 }],
+    fontSize: 32,
+    zIndex: 2,
+    shadowColor: '#FFD93D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  compareCloseButton: {
+    marginTop: 28,
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: '#f2f2f2',
   },
 });

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, Modal, Dimensions } from 'react-native';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '../../components/ThemedText';
+import { ThemedView } from '../../components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import StepIndicator from 'react-native-step-indicator';
@@ -14,7 +14,7 @@ const funnelSteps: { label: string; icon: IconName; color: string }[] = [
   { label: 'Add to Cart', icon: 'cart-plus', color: Colors.light.accent },
   { label: 'Purchase', icon: 'credit-card-check', color: Colors.light.success },
 ];
-const funnelRates = ['82%', '68%', '44%']; // Example demo conversion rates
+const funnelRates = ['121', '68%', '44%', '20%']; // Example demo conversion rates
 
 const stepLabels = funnelSteps.map(s => s.label);
 
@@ -68,7 +68,15 @@ const timeRanges = ['Today', 'This Week', 'This Month'];
 export default function AdminDashboard() {
   const [selectedTime, setSelectedTime] = useState('Today');
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState<{
+    name: string;
+    qr: number;
+    tryon: number;
+    rec: number;
+    cart: number;
+    purchases: number;
+    icon: string;
+  } | null>(null);
 
   const openProductModal = (product: any) => {
     setSelectedProduct(product);
@@ -127,7 +135,7 @@ export default function AdminDashboard() {
         {keyMetrics.map((metric) => (
           <ThemedView key={metric.key} style={[styles.metricCard, { backgroundColor: metric.color + '22' }]}> 
             <View style={styles.metricIconWrap}>
-              <MaterialCommunityIcons name={metric.icon} size={28} color={metric.color} />
+              <MaterialCommunityIcons name={metric.icon as any} size={28} color={metric.color} />
             </View>
             <ThemedText type="subtitle" style={styles.metricLabel}>{metric.label}</ThemedText>
             <ThemedText style={styles.metricValue}>{metric.value}</ThemedText>
@@ -139,39 +147,43 @@ export default function AdminDashboard() {
       </View>
 
       {/* Product Metrics Table */}
-      <ThemedView style={styles.tableCard}>
-        <View style={styles.tableHeaderRowModern}>
-          <ThemedText type="subtitle" style={styles.tableHeaderModern}>Product</ThemedText>
-          <ThemedText type="subtitle" style={styles.tableHeaderModern}>QR</ThemedText>
-          <ThemedText type="subtitle" style={styles.tableHeaderModern}>Try-Ons</ThemedText>
-          <ThemedText type="subtitle" style={styles.tableHeaderModern}>Rec Clicks</ThemedText>
-          <ThemedText type="subtitle" style={styles.tableHeaderModern}>Cart</ThemedText>
-          <ThemedText type="subtitle" style={styles.tableHeaderModern}>Purchases</ThemedText>
-        </View>
-        {productMetrics.map((row: any, idx: number) => {
-          const isTop = row.name === topProductName;
-          return (
-            <TouchableOpacity
-              key={row.name}
-              style={[styles.tableRowModern, idx % 2 === 0 ? styles.tableRowAltModern : null, isTop && styles.tableRowTopProduct]}
-              onPress={() => openProductModal(row)}
-              activeOpacity={0.92}
-            >
-              <View style={styles.tableProductCellModern}>
-                <View style={[styles.productIconCircle, isTop && styles.productIconCircleTop]}>
-                  <MaterialCommunityIcons name={row.icon as any} size={20} color={'#fff'} />
-                </View>
-                <ThemedText style={[styles.tableCellModern, styles.productNameCell, isTop && styles.productNameCellTop]}>{row.name}</ThemedText>
-              </View>
-              <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.qr}</ThemedText>
-              <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.tryon}</ThemedText>
-              <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.rec}</ThemedText>
-              <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.cart}</ThemedText>
-              <ThemedText style={[styles.tableCellModern, styles.metricCell, isTop && styles.metricCellTop]}>{row.purchases}</ThemedText>
-            </TouchableOpacity>
-          );
-        })}
-      </ThemedView>
+      <View style={styles.horizontalScrollWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <ThemedView style={styles.tableCard}>
+            <View style={styles.tableHeaderRowModern}>
+              <ThemedText type="subtitle" style={styles.tableHeaderModern}>Product</ThemedText>
+              <ThemedText type="subtitle" style={styles.tableHeaderModern}>QR</ThemedText>
+              <ThemedText type="subtitle" style={styles.tableHeaderModern}>Try-Ons</ThemedText>
+              <ThemedText type="subtitle" style={styles.tableHeaderModern}>Rec Clicks</ThemedText>
+              <ThemedText type="subtitle" style={styles.tableHeaderModern}>Cart</ThemedText>
+              <ThemedText type="subtitle" style={styles.tableHeaderModern}>Purchases</ThemedText>
+            </View>
+            {productMetrics.map((row: any, idx: number) => {
+              const isTop = row.name === topProductName;
+              return (
+                <TouchableOpacity
+                  key={row.name}
+                  style={[styles.tableRowModern, idx % 2 === 0 ? styles.tableRowAltModern : null, isTop && styles.tableRowTopProduct]}
+                  onPress={() => openProductModal(row)}
+                  activeOpacity={0.92}
+                >
+                  <View style={styles.tableProductCellModern}>
+                    <View style={[styles.productIconCircle, isTop && styles.productIconCircleTop]}>
+                      <MaterialCommunityIcons name={row.icon as any} size={20} color={'#fff'} />
+                    </View>
+                    <ThemedText style={[styles.tableCellModern, styles.productNameCell, isTop && styles.productNameCellTop]}>{row.name}</ThemedText>
+                  </View>
+                  <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.qr}</ThemedText>
+                  <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.tryon}</ThemedText>
+                  <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.rec}</ThemedText>
+                  <ThemedText style={[styles.tableCellModern, styles.metricCell]}>{row.cart}</ThemedText>
+                  <ThemedText style={[styles.tableCellModern, styles.metricCell, isTop && styles.metricCellTop]}>{row.purchases}</ThemedText>
+                </TouchableOpacity>
+              );
+            })}
+          </ThemedView>
+        </ScrollView>
+      </View>
 
       {/* Product Analytics Modal */}
       <Modal
@@ -393,18 +405,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tableCard: {
-    backgroundColor: Colors.light.cardBackground,
+    minWidth: 800, // ensures horizontal scroll on small screens
     borderRadius: 22,
     padding: 0,
-    marginBottom: 18,
+    backgroundColor: Colors.light.cardBackground,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.13,
     shadowRadius: 10,
     elevation: 5,
-    width: width - 32,
-    alignSelf: 'center',
-    overflow: 'hidden',
   },
   tableHeaderRowModern: {
     flexDirection: 'row',
@@ -434,8 +443,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 18,
-    paddingHorizontal: 8,
-    width: '100%',
+    paddingHorizontal: 12,
+    width: '100%', // keep as is or set to undefined for flexibility
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.border,
@@ -556,5 +565,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.light.primary,
     marginLeft: 8,
+  },
+  horizontalScrollWrapper: {
+    width: '100%',
+    marginBottom: 18,
   },
 }); 

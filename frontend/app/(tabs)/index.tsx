@@ -24,7 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '@/constants/Api';
-import { useAuth } from '../extra/auth-context';
+import { useAuth } from '../../contexts/auth-context';
 
 const { width, height: screenHeight } = Dimensions.get('window');
 
@@ -100,11 +100,11 @@ const useFullBodyValidator = (kind: 'front' | 'side'): Validator => {
         const fd = new FormData();
         fd.append('image', {
           uri,
-          name: `${kind}.${ext}`,
+          name: `${kind}_validation_${Date.now()}.${ext}`,
           type: `image/${ext}`,
         } as any);
         // Debug logging
-        console.log('Uploading image for validation:', { kind, uri, ext });
+        console.log('Validating image for fullbody detection:', { kind, uri, ext });
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30_000);
@@ -169,7 +169,7 @@ export default function OnboardingScreen() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const router = useRouter();
-  const { signup, login } = useAuth();
+  const { signup, login, user } = useAuth();
   const [authLoading, setAuthLoading] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
@@ -259,7 +259,7 @@ export default function OnboardingScreen() {
         const ext = normaliseExt(uri.split('.').pop());
         fd.append(field, {
           uri,
-          name: `${field}.${ext}`,
+          name: `${field}_${Date.now()}.${ext}`, // Add timestamp to prevent filename collisions
           type: `image/${ext}`,
         } as any);
       };
@@ -268,20 +268,44 @@ export default function OnboardingScreen() {
       fd.append('height', height);
       if (weight) fd.append('weight', weight);
       fd.append('gender', 'other');
-
+      if (user && user.id) {
+        fd.append('user_id', String(user.id));
+      }
+      
+      // Add timeout for the API call
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000); // 60 second timeout
+      
+      console.log('Starting body measurement analysis...');
       const res = await fetch(`${API_BASE_URL}/api/body-measure/predict-avg`, {
         method: 'POST',
         body: fd,
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeout);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Server error (${res.status}): ${errorText || res.statusText}`);
+      }
+      
       const data = await res.json();
       if (data?.error) throw new Error(data.error);
+      
+      console.log('Analysis completed successfully');
       setResult(data);
       setLoading(false);
     } catch (err: any) {
-      Alert.alert('Analyse failed', err.message || 'Server error');
+      console.error('Analysis failed:', err);
+      if (err.name === 'AbortError') {
+        Alert.alert('Request timeout', 'The analysis request took too long. Please try again.');
+      } else {
+        Alert.alert('Analysis failed', err.message || 'Server error');
+      }
       setLoading(false);
     }
-  }, [frontImage, sideImage, height, weight]);
+  }, [frontImage, sideImage, height, weight, user]);
 
   const renderWelcomeStep = () => (
     <View style={styles.container}>
@@ -292,15 +316,6 @@ export default function OnboardingScreen() {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      
-      <View style={styles.welcomeHeader}>
-        <Image
-          source={require('@/assets/images/icon.png')}
-          style={styles.premiumLogo}
-        />
-        <Text style={styles.brandTitle}>StyleFit</Text>
-        <Text style={styles.brandSubtitle}>Premium Fashion Experience</Text>
-      </View>
 
       <View style={styles.welcomeCard}>
         <View style={styles.iconRow}>
@@ -317,8 +332,23 @@ export default function OnboardingScreen() {
         
         <Text style={styles.welcomeTitle}>Find Your Perfect Fit</Text>
         <Text style={styles.welcomeDescription}>
-          Get personalized clothing recommendations using AI-powered body analysis. Shop with confidence knowing your size.
+          Get personalized clothing recommendations using AI-powered body analysis.
         </Text>
+
+        <View style={styles.authToggle}>
+          <TouchableOpacity 
+            style={[styles.toggleButton, !showLogin && styles.activeToggle]} 
+            onPress={() => setShowLogin(false)}
+          >
+            <Text style={[styles.toggleText, !showLogin && styles.activeToggleText]}>Sign Up</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.toggleButton, showLogin && styles.activeToggle]} 
+            onPress={() => setShowLogin(true)}
+          >
+            <Text style={[styles.toggleText, showLogin && styles.activeToggleText]}>Login</Text>
+          </TouchableOpacity>
+        </View>
 
         {showLogin ? (
           <View style={styles.inputContainer}>
@@ -376,50 +406,46 @@ export default function OnboardingScreen() {
                 )}
               </LinearGradient>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowLogin(false)} style={{ marginTop: 16 }}>
-              <Text style={{ color: '#4ECDC4', textAlign: 'center' }}>Don&apos;t have an account? Sign Up</Text>
-            </TouchableOpacity>
           </View>
         ) : (
-          <>
-            <View style={styles.inputContainer}>
-              <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Your Name</Text>
-                <TextInput
-                  style={styles.premiumInput}
-                  placeholder="Enter your name"
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                  placeholderTextColor="#B0B8C4"
-                />
-              </View>
-              
-              <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Email Address</Text>
-                <TextInput
-                  style={styles.premiumInput}
-                  placeholder="Enter your email"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholderTextColor="#B0B8C4"
-                />
-              </View>
-              <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Password</Text>
-                <TextInput
-                  style={styles.premiumInput}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholderTextColor="#B0B8C4"
-                />
-              </View>
+          <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Your Name</Text>
+              <TextInput
+                style={styles.premiumInput}
+                placeholder="Enter your name"
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                placeholderTextColor="#B0B8C4"
+              />
             </View>
+            
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Email Address</Text>
+              <TextInput
+                style={styles.premiumInput}
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholderTextColor="#B0B8C4"
+              />
+            </View>
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <TextInput
+                style={styles.premiumInput}
+                placeholder="Enter your password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                placeholderTextColor="#B0B8C4"
+              />
+            </View>
+            
             <TouchableOpacity
               style={[styles.premiumButton, !(name && email && password) && styles.disabledButton]}
               disabled={!(name && email && password) || authLoading}
@@ -440,10 +466,7 @@ export default function OnboardingScreen() {
                 )}
               </LinearGradient>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowLogin(true)} style={{ marginTop: 16 }}>
-              <Text style={{ color: '#4ECDC4', textAlign: 'center' }}>Already have an account? Login</Text>
-            </TouchableOpacity>
-          </>
+          </View>
         )}
       </View>
     </View>
@@ -544,11 +567,73 @@ export default function OnboardingScreen() {
 
       <View style={styles.finalCard}>
         {result ? (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>API Result</Text>
-            <ScrollView style={styles.resultScroll}>
-              <Text style={styles.resultText}>{JSON.stringify(result, null, 2)}</Text>
-            </ScrollView>
+          <View style={styles.resultContainer}>
+            <LinearGradient
+              colors={['#4ECDC4', '#45B7D1']}
+              style={styles.resultHeaderGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Text style={styles.resultHeaderText}>Your Perfect Fit</Text>
+            </LinearGradient>
+            
+            <View style={styles.resultContent}>
+              <View style={styles.sizeContainer}>
+                <Text style={styles.sizeLabel}>RECOMMENDED SIZE</Text>
+                <Text style={styles.sizeValue}>XL</Text>
+                <Text style={styles.sizePerfect}>Perfect Match!</Text>
+              </View>
+              
+              <View style={styles.measurementsContainer}>
+                <View style={styles.measurementItem}>
+                  <View style={styles.measurementIconContainer}>
+                    <Text style={styles.measurementIcon}>💪</Text>
+                  </View>
+                  <Text style={styles.measurementLabel}>Shoulder</Text>
+                  <Text style={styles.measurementValue}>
+                    {result.shoulder_in ? `${result.shoulder_in.toFixed(1)}″` : '- -'}
+                  </Text>
+                </View>
+                
+                <View style={styles.measurementItem}>
+                  <View style={styles.measurementIconContainer}>
+                    <Text style={styles.measurementIcon}>👕</Text>
+                  </View>
+                  <Text style={styles.measurementLabel}>Chest</Text>
+                  <Text style={styles.measurementValue}>
+                    {result.chest_in ? `${result.chest_in.toFixed(1)}″` : '- -'}
+                  </Text>
+                </View>
+                
+                <View style={styles.measurementItem}>
+                  <View style={styles.measurementIconContainer}>
+                    <Text style={styles.measurementIcon}>⏱️</Text>
+                  </View>
+                  <Text style={styles.measurementLabel}>Waist</Text>
+                  <Text style={styles.measurementValue}>
+                    {result.waist_in ? `${result.waist_in.toFixed(1)}″` : '- -'}
+                  </Text>
+                </View>
+              </View>
+              
+              <TouchableOpacity style={styles.viewAllButton} onPress={() => Alert.alert('All Measurements', JSON.stringify(result, null, 2))}>
+                <Text style={styles.viewAllButtonText}>View All Measurements</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.shopNowButton}
+                onPress={() => router.navigate("/(tabs)/store")}
+              >
+                <LinearGradient
+                  colors={['#FF6B6B', '#FF8E53']}
+                  style={styles.buttonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.buttonText}>Shop Now With Your Size</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           <>
@@ -742,7 +827,7 @@ const styles = StyleSheet.create({
   iconRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
     gap: 20,
   },
   featureIcon: {
@@ -769,7 +854,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     lineHeight: 34,
   },
   welcomeDescription: {
@@ -777,14 +862,46 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 40,
+    marginBottom: 25,
     paddingHorizontal: 10,
   },
+  authToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 25,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  activeToggle: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  activeToggleText: {
+    color: '#1F2937',
+  },
   inputContainer: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   inputWrapper: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   inputLabel: {
     fontSize: 14,
@@ -1026,12 +1143,6 @@ const styles = StyleSheet.create({
     elevation: 2,
     maxHeight: 200,
   },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#374151',
-  },
   resultScroll: {
     maxHeight: 140,
   },
@@ -1039,5 +1150,109 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     fontSize: 13,
     color: '#111827',
+  },
+  // New styles for measurement result UI
+  resultContainer: {
+    marginTop: 20,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  resultHeaderGradient: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultHeaderText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  resultContent: {
+    padding: 24,
+  },
+  sizeContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  sizeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  sizeValue: {
+    fontSize: 60,
+    fontWeight: '800',
+    color: '#FF6B6B',
+    lineHeight: 70,
+  },
+  sizePerfect: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#10B981',
+    marginTop: 6,
+  },
+  measurementsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 30,
+  },
+  measurementItem: {
+    alignItems: 'center',
+  },
+  measurementIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  measurementIcon: {
+    fontSize: 24,
+  },
+  measurementLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 6,
+  },
+  measurementValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  viewAllButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  viewAllButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4ECDC4',
+  },
+  shopNowButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });

@@ -107,12 +107,11 @@ async def predict_yolo_service(front: UploadFile, side: UploadFile, height: int,
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-async def detect_fullbody_service(image: UploadFile, background_tasks: BackgroundTasks = None):
-    def upload_task():
-        upload_image_to_cloudinary(image, folder="body_measurements")
+async def detect_fullbody_service(image: UploadFile):
     try:
-        if background_tasks is not None:
-            background_tasks.add_task(upload_task)
+        # Reset file position if needed to ensure we can read the image
+        image.file.seek(0)
+            
         img = parse_image(image)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mp_holistic = mp.solutions.holistic
@@ -133,11 +132,14 @@ async def detect_fullbody_service(image: UploadFile, background_tasks: Backgroun
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-async def predict_avg_service(front: UploadFile, side: UploadFile, height: int, weight: int = None, gender: str = None):
+async def predict_avg_service(front: UploadFile, side: UploadFile, height: int, weight: int = None, gender: str = None, user_id: int = None):
     try:
         import io
+        from utils.cloudinary_utils import upload_image_to_cloudinary
         front_bytes = await front.read()
         side_bytes = await side.read()
+        front.file.seek(0)
+        side.file.seek(0)
         def make_uploadfile(filename, bytes_data):
             file_obj = io.BytesIO(bytes_data)
             upload_file = UploadFile(file=file_obj, filename=filename)
@@ -146,6 +148,47 @@ async def predict_avg_service(front: UploadFile, side: UploadFile, height: int, 
         side1 = make_uploadfile(side.filename, side_bytes)
         front2 = make_uploadfile(front.filename, front_bytes)
         side2 = make_uploadfile(side.filename, side_bytes)
+
+        # Upload to Cloudinary and log details
+        # Create fresh file objects for Cloudinary uploads
+        front_upload = make_uploadfile(front.filename, front_bytes)
+        front_cloudinary_url = upload_image_to_cloudinary(front_upload, folder="body_measurements")
+        print(f"[Cloudinary Upload] Front image: {front.filename} => {front_cloudinary_url}")
+        
+        side_upload = make_uploadfile(side.filename, side_bytes)
+        side_cloudinary_url = upload_image_to_cloudinary(side_upload, folder="body_measurements")
+        print(f"[Cloudinary Upload] Side image: {side.filename} => {side_cloudinary_url}")
+
+        # Save to UserImage table if user_id is provided
+        if user_id is not None:
+            try:
+                from utils.cloudinary_utils import upload_and_save_user_image
+                from models.pydantic_models import ImageType
+                from database import SessionLocal
+                db = SessionLocal()
+                # Save front image - create fresh file objects for each operation
+                front_user_img = make_uploadfile(front.filename, front_bytes)
+                upload_and_save_user_image(
+                    front_user_img,
+                    user_id=user_id,
+                    image_type=ImageType.FRONT,
+                    db=db,
+                    folder="body_measurements"
+                )
+                
+                # Save side image - create fresh file objects for each operation
+                side_user_img = make_uploadfile(side.filename, side_bytes)
+                upload_and_save_user_image(
+                    side_user_img,
+                    user_id=user_id,
+                    image_type=ImageType.SIDE,
+                    db=db,
+                    folder="body_measurements"
+                )
+                db.close()
+            except Exception as e:
+                print(f"[UserImage Save Error] {e}")
+
         mediapipe_res = await predict_mediapipe_service(front=front1, side=side1, height=height, weight=weight, gender=gender)
         yolo_res = await predict_yolo_service(front=front2, side=side2, height=height, weight=weight, gender=gender)
         if isinstance(mediapipe_res, JSONResponse):
@@ -170,7 +213,9 @@ async def predict_avg_service(front: UploadFile, side: UploadFile, height: int, 
         return {
             "average": avg_result,
             "mediapipe": mediapipe_res,
-            "yolo": yolo_res
+            "yolo": yolo_res,
+            "front_cloudinary_url": front_cloudinary_url,
+            "side_cloudinary_url": side_cloudinary_url
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)}) 

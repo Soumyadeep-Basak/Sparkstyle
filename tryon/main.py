@@ -99,3 +99,20 @@ def tryon_generate(request: TryOnRequest):
     save_image(result, request.output_path)
 
     return FileResponse(path=request.output_path, filename="tryon_result.jpg", media_type="image/jpeg")
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run TryOn via CLI.")
+    parser.add_argument("--person_path", type=str, required=True)
+    parser.add_argument("--garment_path", type=str, required=True)
+    parser.add_argument("--output_path", type=str, required=True)
+    args = parser.parse_args()
+
+    if not API_KEY:
+        raise RuntimeError("API_KEY not set in environment.")
+    if not os.path.exists(args.person_path) or not os.path.exists(args.garment_path):
+        raise RuntimeError("Person or Garment image not found.")
+    result = generate_tryon(API_KEY, args.person_path, args.garment_path, fast_mode=True)
+    save_image(result, args.output_path)
+    print(f"Saved tryon result to {args.output_path}")

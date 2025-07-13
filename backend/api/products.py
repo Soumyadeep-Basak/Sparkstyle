@@ -31,6 +31,13 @@ async def list_products(db: Session = Depends(get_db)):
     products = db.query(Product).all()
     return products
 
+@router.get("/{product_id}", response_model=ProductResponse)
+async def get_product(product_id: int, db: Session = Depends(get_db)):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
 @router.post("/{product_id}/upload_image")
 async def upload_product_image(product_id: int, image: UploadFile = File(...), db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == product_id).first()

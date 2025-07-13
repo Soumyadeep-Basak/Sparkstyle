@@ -30,6 +30,10 @@ def allowed_file(filename: str) -> bool:
 
 @router.post("/", response_model=UserResponse)
 async def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    # Check if email already exists
+    existing_user = db.query(User).filter(User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Email already registered.")
     hashed_password = pwd_context.hash(user.password)
     db_user = User(username=user.username, email=user.email, password_hash=hashed_password)
     db.add(db_user)
@@ -57,6 +61,7 @@ async def upload_user_image(user_id: int, image: UploadFile = File(...), db: Ses
     
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)
+    image.file.seek(0)
     
     user.image = filename
     db.commit()

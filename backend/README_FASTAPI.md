@@ -74,6 +74,32 @@ python body_measure_api.py
 - `POST /body-measure/detect-fullbody` - Full body detection
 - `POST /body-measure/predict-avg` - Average prediction
 
+## /api/tryon Endpoint
+
+POST `/api/tryon/`
+
+Runs the tryon process using the user's front image (fetched from the database) and an uploaded garment image, returning the resulting image.
+
+**Request:**
+- Content-Type: multipart/form-data
+- Fields:
+  - `user_id`: integer (ID of the user whose front image will be used)
+  - `garment_image`: JPEG image file of the garment
+
+**Response:**
+- 200 OK: JPEG image file of the tryon result
+- 404: If the user's front image is not found
+- 500: Error if tryon process fails
+
+**Example using curl:**
+
+```bash
+curl -X POST "http://localhost:8000/api/tryon/" \
+  -F "user_id=1" \
+  -F "garment_image=@/path/to/garment.jpg" \
+  --output tryon_result.jpg
+```
+
 ## Key Changes from Flask
 
 1. **Framework**: Replaced Flask with FastAPI

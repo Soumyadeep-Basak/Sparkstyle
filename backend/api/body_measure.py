@@ -30,10 +30,9 @@ async def predict_yolo(
 
 @router.post("/detect-fullbody")
 async def detect_fullbody(
-    image: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None
+    image: UploadFile = File(...)
 ):
-    return await detect_fullbody_service(image, background_tasks)
+    return await detect_fullbody_service(image)
 
 @router.post("/predict-avg")
 async def predict_avg(
@@ -41,6 +40,7 @@ async def predict_avg(
     side: UploadFile = File(...),
     height: int = Form(...),
     weight: int = Form(None),
-    gender: str = Form(None)
+    gender: str = Form(None),
+    user_id: int = Form(None)
 ):
-    return await predict_avg_service(front, side, height, weight, gender)
+    return await predict_avg_service(front, side, height, weight, gender, user_id)

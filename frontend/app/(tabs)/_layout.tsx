@@ -25,6 +25,10 @@ const ProfileIcon = ({ color }: { color: string }) => (
   <Ionicons name="person-circle" size={24} color={color} />
 );
 
+const AdminIcon = ({ color }: { color: string }) => (
+  <MaterialCommunityIcons name="view-dashboard" size={24} color={color} />
+);
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [result, setResult] = React.useState(null);
@@ -83,6 +87,7 @@ export default function TabLayout() {
             textAlign: 'center',
           },
         }}
+<<<<<<< Updated upstream
       >
         <Tabs.Screen
           name="index"
@@ -112,7 +117,39 @@ export default function TabLayout() {
         tabBarIcon: ProfileIcon,
           }}
         />
+        <Tabs.Screen
+          name="admin-dashboard"
+          options={{
+            title: 'Admin',
+            tabBarIcon: AdminIcon,
+          }}
+        />
       </Tabs>
     </AnalysisResultContext.Provider>
+=======
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Explore',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="image-upload"
+        options={{
+          title: 'Image',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="camera.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="qr-scan"
+        options={{
+          title: 'QR Scan',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="qrcode" color={color} />,
+        }}
+      />
+    </Tabs>
+>>>>>>> Stashed changes
   );
 }

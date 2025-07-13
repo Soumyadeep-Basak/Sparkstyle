@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import React, {
   useState,
   useCallback,
@@ -763,6 +764,68 @@ export default function OnboardingScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </AnalysisResultContext.Provider>
+=======
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+
+const features = [
+  {
+    title: 'Virtual Try-On',
+    icon: 'shirt-outline',
+    route: 'tryon',
+    description: 'Try clothes virtually using your camera or photo.',
+  },
+  {
+    title: 'Suggestions',
+    icon: 'bulb-outline',
+    route: 'suggestions',
+    description: 'Get personalized outfit and product recommendations.',
+  },
+  {
+    title: 'Inventory/Admin',
+    icon: 'cube-outline',
+    route: 'inventory',
+    description: 'Manage store inventory and admin tasks (Retail only).',
+  },
+  {
+    title: 'Analytics',
+    icon: 'analytics-outline',
+    route: 'analytics',
+    description: 'View data insights and usage analytics.',
+  },
+  {
+    title: 'QR Scan',
+    icon: 'qr-code-outline',
+    route: 'qr-scan',
+    description: 'Scan QR codes for quick product lookup or check-in.',
+  },
+];
+
+export default function HomeScreen() {
+  const router = useRouter();
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Welcome to Virtual Try-On Platform</Text>
+      <Text style={styles.subtitle}>Choose a feature to get started:</Text>
+      <View style={styles.cardsContainer}>
+        {features.map((feature) => (
+          <TouchableOpacity
+            key={feature.title}
+            style={styles.card}
+            onPress={() => router.push(`/${feature.route}`)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={feature.icon as any} size={36} color="#4F8EF7" style={{ marginBottom: 8 }} />
+            <Text style={styles.cardTitle}>{feature.title}</Text>
+            <Text style={styles.cardDesc}>{feature.description}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
+>>>>>>> Stashed changes
   );
 }
 
@@ -770,6 +833,7 @@ export default function OnboardingScreen() {
  * Premium Modern Styles
  *****************************************************************************************/
 const styles = StyleSheet.create({
+<<<<<<< Updated upstream
   keyboardContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -1065,11 +1129,62 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 8,
+=======
+  container: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    padding: 24,
+    backgroundColor: '#f8f9fa',
   },
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    marginTop: 24,
+>>>>>>> Stashed changes
+    marginBottom: 8,
+    color: '#222',
+    textAlign: 'center',
+  },
+<<<<<<< Updated upstream
   uploadSubtext: {
     fontSize: 14,
     color: '#9CA3AF',
+=======
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  cardsContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  card: {
+    width: '95%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#222',
+    marginBottom: 4,
+  },
+  cardDesc: {
+    fontSize: 14,
+    color: '#555',
+    textAlign: 'center',
+>>>>>>> Stashed changes
   },
   validationOverlay: {
     position: 'absolute',

@@ -99,12 +99,19 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="cart"
+          options={{
+        title: 'Cart',
+        tabBarIcon: StoreIcon,
+          }}
+        />
+        {/* <Tabs.Screen
           name="store"
           options={{
         title: 'Store',
         tabBarIcon: StoreIcon,
           }}
-        />
+        /> */}
         <Tabs.Screen
           name="profile"
           options={{

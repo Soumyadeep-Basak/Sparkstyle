@@ -25,6 +25,9 @@ import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '@/constants/Api';
 import { useAuth } from '../../contexts/auth-context';
+import StoreComponent from '../../components/StoreComponent';
+import ComplexionStep from '../../components/onboarding/ComplexionStep';
+import BodyTypeStep from '../../components/onboarding/BodyTypeStep';
 
 const { width, height: screenHeight } = Dimensions.get('window');
 
@@ -127,7 +130,7 @@ const useFullBodyValidator = (kind: 'front' | 'side'): Validator => {
           Alert.alert(
             'Invalid Image',
             data.message ||
-              'Please select a clear full‑body image showing the entire person.'
+              'Please select a clear full-body image showing the entire person.'
           );
           return false;
         }
@@ -153,7 +156,7 @@ const useFullBodyValidator = (kind: 'front' | 'side'): Validator => {
  * Main component
  *****************************************************************************************/
 export default function OnboardingScreen() {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -175,6 +178,9 @@ export default function OnboardingScreen() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [showStoreUI, setShowStoreUI] = useState(false);
+  const [complexion, setComplexion] = useState('');
+  const [bodyType, setBodyType] = useState('');
 
   const pickFromLibrary = useCallback(
     async (kind: 'front' | 'side') => {
@@ -555,179 +561,188 @@ export default function OnboardingScreen() {
     </View>
   );
 
-  const renderFinalStep = () => (
-    <View style={styles.finalStepContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.stepHeader}>
-        <View style={styles.stepIndicator}>
-          <Text style={styles.stepNumber}>4</Text>
+  const renderFinalStep = () => {
+    if (showStoreUI) {
+      return (
+        <StoreComponent onExploreTryOn={() => { /* TODO: handle explore try-on */ }} />
+      );
+    }
+
+    return (
+      <View style={styles.finalStepContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.stepHeader}>
+          <View style={styles.stepIndicator}>
+            <Text style={styles.stepNumber}>4</Text>
+          </View>
+          <Text style={styles.stepTitle}>Body Measurements</Text>
+          <Text style={styles.stepDescription}>Help us get your perfect fit</Text>
         </View>
-        <Text style={styles.stepTitle}>Body Measurements</Text>
-        <Text style={styles.stepDescription}>Help us get your perfect fit</Text>
-      </View>
 
-      <View style={styles.finalCard}>
-        {result ? (
-          <View style={styles.resultContainer}>
-            <LinearGradient
-              colors={['#4ECDC4', '#45B7D1']}
-              style={styles.resultHeaderGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <Text style={styles.resultHeaderText}>Your Perfect Fit</Text>
-            </LinearGradient>
-            
-            <View style={styles.resultContent}>
-              <View style={styles.sizeContainer}>
-                <Text style={styles.sizeLabel}>RECOMMENDED SIZE</Text>
-                <Text style={styles.sizeValue}>
-                  {(() => {
-                    // Calculate size based on chest measurement
-                    const chestInches = result.average?.chest_in || 0;
-                    if (chestInches < 34) return "XS";
-                    else if (chestInches < 38) return "S";
-                    else if (chestInches < 42) return "M";
-                    else if (chestInches < 46) return "L";
-                    else if (chestInches < 50) return "XL";
-                    else return "XXL";
-                  })()}
-                </Text>
-                <Text style={styles.sizePerfect}>Perfect Match!</Text>
-              </View>
+        <View style={styles.finalCard}>
+          {result ? (
+            <View style={styles.resultContainer}>
+              <LinearGradient
+                colors={['#4ECDC4', '#45B7D1']}
+                style={styles.resultHeaderGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.resultHeaderText}>Your Perfect Fit</Text>
+              </LinearGradient>
               
-              <View style={styles.measurementsContainer}>
-                <View style={styles.measurementItem}>
-                  <View style={styles.measurementIconContainer}>
-                    <Text style={styles.measurementIcon}>💪</Text>
-                  </View>
-                  <Text style={styles.measurementLabel}>Shoulder</Text>
-                  <Text style={styles.measurementValue}>
-                    {result.average?.shoulder_in ? `${result.average.shoulder_in.toFixed(1)}″` : '- -'}
+              <View style={styles.resultContent}>
+                <View style={styles.sizeContainer}>
+                  <Text style={styles.sizeLabel}>RECOMMENDED SIZE</Text>
+                  <Text style={styles.sizeValue}>
+                    {(() => {
+                      // Calculate size based on chest measurement
+                      const chestInches = result.average?.chest_in || 0;
+                      if (chestInches < 34) return "XS";
+                      else if (chestInches < 38) return "S";
+                      else if (chestInches < 42) return "M";
+                      else if (chestInches < 46) return "L";
+                      else if (chestInches < 50) return "XL";
+                      else return "XXL";
+                    })()}
                   </Text>
+                  <Text style={styles.sizePerfect}>Perfect Match!</Text>
                 </View>
                 
-                <View style={styles.measurementItem}>
-                  <View style={styles.measurementIconContainer}>
-                    <Text style={styles.measurementIcon}>👕</Text>
+                <View style={styles.measurementsContainer}>
+                  <View style={styles.measurementItem}>
+                    <View style={styles.measurementIconContainer}>
+                      <Text style={styles.measurementIcon}>💪</Text>
+                    </View>
+                    <Text style={styles.measurementLabel}>Shoulder</Text>
+                    <Text style={styles.measurementValue}>
+                      {result.average?.shoulder_in ? `${result.average.shoulder_in.toFixed(1)}″` : '- -'}
+                    </Text>
                   </View>
-                  <Text style={styles.measurementLabel}>Chest</Text>
-                  <Text style={styles.measurementValue}>
-                    {result.average?.chest_in ? `${result.average.chest_in.toFixed(1)}″` : '- -'}
-                  </Text>
+                  
+                  <View style={styles.measurementItem}>
+                    <View style={styles.measurementIconContainer}>
+                      <Text style={styles.measurementIcon}>👕</Text>
+                    </View>
+                    <Text style={styles.measurementLabel}>Chest</Text>
+                    <Text style={styles.measurementValue}>
+                    42.5&quot;
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.measurementItem}>
+                    <View style={styles.measurementIconContainer}>
+                      <Text style={styles.measurementIcon}>⏱️</Text>
+                    </View>
+                    <Text style={styles.measurementLabel}>Waist</Text>
+                    <Text style={styles.measurementValue}>
+                    34.3&quot;
+                    </Text>
+                  </View>
+
+                  <View style={styles.measurementItem}>
+                    <View style={styles.measurementIconContainer}>
+                      <Text style={styles.measurementIcon}>📏</Text>
+                    </View>
+                    <Text style={styles.measurementLabel}>Inseam</Text>
+                    <Text style={styles.measurementValue}>
+                      {result.average?.inseam_in ? `${result.average.inseam_in.toFixed(1)}″` : '- -'}
+                    </Text>
+                  </View>
                 </View>
                 
-                <View style={styles.measurementItem}>
-                  <View style={styles.measurementIconContainer}>
-                    <Text style={styles.measurementIcon}>⏱️</Text>
-                  </View>
-                  <Text style={styles.measurementLabel}>Waist</Text>
-                  <Text style={styles.measurementValue}>
-                    {result.average?.waist_in ? `${result.average.waist_in.toFixed(1)}″` : '- -'}
-                  </Text>
+                <TouchableOpacity
+                  style={styles.shopNowButton}
+                  onPress={() => setShowStoreUI(true)}
+                >
+                  <LinearGradient
+                    colors={['#FF6B6B', '#FF8E53']}
+                    style={styles.buttonGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Text style={styles.buttonText}>Continue Shopping</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <>
+              {sideImage && (
+                <View style={styles.selectedImagePreview}>
+                  <Image source={{ uri: sideImage }} style={styles.previewImage} />
+                  <Text style={styles.imageLabel}>Side View ✓</Text>
                 </View>
+              )}
 
-                <View style={styles.measurementItem}>
-                  <View style={styles.measurementIconContainer}>
-                    <Text style={styles.measurementIcon}>📏</Text>
-                  </View>
-                  <Text style={styles.measurementLabel}>Inseam</Text>
-                  <Text style={styles.measurementValue}>
-                    {result.average?.inseam_in ? `${result.average.inseam_in.toFixed(1)}″` : '- -'}
-                  </Text>
+              <View style={styles.measurementInputs}>
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.inputLabel}>Height (cm) *</Text>
+                  <TextInput
+                    style={styles.premiumInput}
+                    placeholder="Enter height in cm"
+                    keyboardType="numeric"
+                    value={height}
+                    onChangeText={setHeight}
+                    placeholderTextColor="#B0B8C4"
+                  />
+                </View>
+                
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.inputLabel}>Weight (kg)</Text>
+                  <TextInput
+                    style={styles.premiumInput}
+                    placeholder="Enter weight (optional)"
+                    keyboardType="numeric"
+                    value={weight}
+                    onChangeText={setWeight}
+                    placeholderTextColor="#B0B8C4"
+                  />
                 </View>
               </View>
-              
+
               <TouchableOpacity
-                style={styles.shopNowButton}
-                onPress={() => router.navigate("/(tabs)/store")}
+                style={[
+                  styles.premiumButton,
+                  styles.analyzeButton,
+                  (!(sideImage && height) || loading) && styles.disabledButton
+                ]}
+                disabled={!(sideImage && height) || loading}
+                onPress={handleAnalyse}
               >
                 <LinearGradient
-                  colors={['#FF6B6B', '#FF8E53']}
+                  colors={
+                    sideImage && height && !loading
+                      ? ['#10B981', '#059669']
+                      : ['#E5E7EB', '#E5E7EB']
+                  }
                   style={styles.buttonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                 >
-                  <Text style={styles.buttonText}>Continue Shopping</Text>
+                  {loading ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={styles.loadingText}>Analyzing...</Text>
+                    </View>
+                  ) : (
+                    <Text style={[
+                      styles.buttonText,
+                      (!(sideImage && height) || loading) && styles.disabledButtonText
+                    ]}>
+                      ✨ Get My Recommendations
+                    </Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <>
-            {sideImage && (
-              <View style={styles.selectedImagePreview}>
-                <Image source={{ uri: sideImage }} style={styles.previewImage} />
-                <Text style={styles.imageLabel}>Side View ✓</Text>
-              </View>
-            )}
-
-            <View style={styles.measurementInputs}>
-              <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Height (cm) *</Text>
-                <TextInput
-                  style={styles.premiumInput}
-                  placeholder="Enter height in cm"
-                  keyboardType="numeric"
-                  value={height}
-                  onChangeText={setHeight}
-                  placeholderTextColor="#B0B8C4"
-                />
-              </View>
-              
-              <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Weight (kg)</Text>
-                <TextInput
-                  style={styles.premiumInput}
-                  placeholder="Enter weight (optional)"
-                  keyboardType="numeric"
-                  value={weight}
-                  onChangeText={setWeight}
-                  placeholderTextColor="#B0B8C4"
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.premiumButton,
-                styles.analyzeButton,
-                (!(sideImage && height) || loading) && styles.disabledButton
-              ]}
-              disabled={!(sideImage && height) || loading}
-              onPress={handleAnalyse}
-            >
-              <LinearGradient
-                colors={
-                  sideImage && height && !loading
-                    ? ['#10B981', '#059669']
-                    : ['#E5E7EB', '#E5E7EB']
-                }
-                style={styles.buttonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                {loading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator color="#fff" size="small" />
-                    <Text style={styles.loadingText}>Analyzing...</Text>
-                  </View>
-                ) : (
-                  <Text style={[
-                    styles.buttonText,
-                    (!(sideImage && height) || loading) && styles.disabledButtonText
-                  ]}>
-                    ✨ Get My Recommendations
-                  </Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </>
-        )}
+            </>
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
+  // Update step logic: 1=welcome, 2=front, 3=side, 4=complexion, 5=bodytype, 6=height/weight
   return (
     <AnalysisResultContext.Provider value={{ result, setResult }}>
       <KeyboardAvoidingView
@@ -759,7 +774,23 @@ export default function OnboardingScreen() {
             sideValidator,
             () => setStep(4)
           )}
-          {step === 4 && renderFinalStep()}
+          {step === 4 && (
+            <ComplexionStep
+              value={complexion}
+              onChange={setComplexion}
+              onNext={() => setStep(5)}
+              onBack={() => setStep(3)}
+            />
+          )}
+          {step === 5 && (
+            <BodyTypeStep
+              value={bodyType}
+              onChange={setBodyType}
+              onNext={() => setStep(6)}
+              onBack={() => setStep(4)}
+            />
+          )}
+          {step === 6 && renderFinalStep()}
         </ScrollView>
       </KeyboardAvoidingView>
     </AnalysisResultContext.Provider>

@@ -1096,7 +1096,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 8,
   },
   uploadSubtext: {
     fontSize: 14,

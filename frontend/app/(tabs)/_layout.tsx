@@ -25,6 +25,10 @@ const ProfileIcon = ({ color }: { color: string }) => (
   <Ionicons name="person-circle" size={24} color={color} />
 );
 
+const AdminIcon = ({ color }: { color: string }) => (
+  <MaterialCommunityIcons name="view-dashboard" size={24} color={color} />
+);
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [result, setResult] = React.useState(null);
@@ -87,15 +91,15 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-        title: 'Home',
-        tabBarIcon: HomeIcon,
+            title: 'Home',
+            tabBarIcon: HomeIcon,
           }}
         />
         <Tabs.Screen
           name="tryon"
           options={{
-        title: 'Try On',
-        tabBarIcon: TryOnIcon,
+            title: 'Try On',
+            tabBarIcon: TryOnIcon,
           }}
         />
         <Tabs.Screen
@@ -108,15 +112,22 @@ export default function TabLayout() {
         {/* <Tabs.Screen
           name="store"
           options={{
-        title: 'Store',
-        tabBarIcon: StoreIcon,
+            title: 'Store',
+            tabBarIcon: StoreIcon,
           }}
         /> */}
         <Tabs.Screen
           name="profile"
           options={{
-        title: 'Profile',
-        tabBarIcon: ProfileIcon,
+            title: 'Profile',
+            tabBarIcon: ProfileIcon,
+          }}
+        />
+        <Tabs.Screen
+          name="admin-dashboard"
+          options={{
+            title: 'Admin',
+            tabBarIcon: AdminIcon,
           }}
         />
       </Tabs>
